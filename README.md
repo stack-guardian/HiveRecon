@@ -82,6 +82,52 @@ python -m hiverecon status --scan-id abc12345
 python -m hiverecon validate target.com --scope scope.json
 ```
 
+### Desktop Shortcut
+
+After installation, search for **"HiveRecon Scanner"** in your applications menu.
+The desktop shortcut allows quick scanning by entering a target URL.
+
+### Available Tools
+
+| Tool | Status | Purpose |
+|------|--------|---------|
+| **nmap** | ✓ Integrated | Port scanning & service detection |
+| **curl** | ✓ Integrated | HTTP header security analysis |
+| subfinder | Optional | Subdomain enumeration |
+| amass | Optional | Subdomain enumeration (alternative) |
+| katana | Optional | Web crawler/endpoint discovery |
+| ffuf | Optional | Fuzzing/endpoint discovery (alternative) |
+| nuclei | Optional | Vulnerability scanning |
+
+### Install All Tools
+
+```bash
+# Run the automated installer
+./install-tools.sh
+
+# Or install manually:
+# Fix nmap (if broken)
+sudo ln -sf /usr/lib/liblua.so.5.4.8 /usr/lib/liblua5.4.so.5.4
+
+# Install Go security tools
+go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+go install github.com/projectdiscovery/katana/cmd/katana@latest
+go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+```
+
+### Docker Usage
+
+```bash
+# Build and run
+docker-compose build
+docker-compose up -d
+
+# Run a scan
+docker-compose exec hiverecon python -m hiverecon scan -t example.com
+
+# See DOCKER.md for more details
+```
+
 ### API
 
 ```bash

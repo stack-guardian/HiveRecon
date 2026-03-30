@@ -40,50 +40,54 @@ class BaseAgent(ABC):
 
 class SubdomainAgent(BaseAgent):
     """Subdomain enumeration agent using subfinder/amass."""
-    
+
     agent_type = AgentType.SUBDOMAIN
-    
+
     def __init__(self, target: str, config: Optional[dict] = None):
         super().__init__(target, config)
         self.tool = self.config.get("tool", "subfinder")  # or "amass"
-    
-    def get_command(self) -> str:
+
+    def get_command(self) -> list:
+        """Get subfinder/amass command as list for subprocess."""
         if self.tool == "amass":
-            return f"amass enum -d {self.target} -silent"
-        return f"subfinder -d {self.target} -silent -json"
-    
+            return ["amass", "enum", "-d", self.target, "-silent"]
+        return ["subfinder", "-d", self.target, "-silent", "-json"]
+
     async def execute(self) -> bool:
-        """Run subdomain enumeration."""
+        """Run subdomain enumeration using subprocess."""
         try:
-            process = await asyncio.create_subprocess_shell(
-                self.get_command(),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            cmd = self.get_command()
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,
             )
-            
-            stdout, stderr = await process.communicate()
-            
-            if stdout:
-                self.output = stdout.decode()
+
+            if result.stdout:
+                self.output = result.stdout
                 self.findings = self.parse_output()
                 return True
             else:
-                self.error = stderr.decode() if stderr else "No output"
+                self.error = result.stderr if result.stderr else "No output"
                 return False
-                
+
+        except subprocess.TimeoutExpired:
+            self.error = "Subdomain enumeration timed out after 300 seconds"
+            return False
         except Exception as e:
             self.error = str(e)
             return False
-    
+
     def parse_output(self) -> list[Finding]:
         """Parse subdomain enumeration results."""
         findings = []
-        
+
         if not self.output:
             return findings
-        
+
         if self.tool == "subfinder":
-            # Parse JSON output
+            # Parse JSON output (one JSON object per line)
             for line in self.output.strip().split("\n"):
                 if line:
                     try:
@@ -99,7 +103,7 @@ class SubdomainAgent(BaseAgent):
                         )
                         findings.append(finding)
                     except json.JSONDecodeError:
-                        # Plain text output
+                        # Plain text output fallback
                         finding = Finding(
                             agent_type=self.agent_type,
                             finding_type="subdomain",
@@ -122,7 +126,7 @@ class SubdomainAgent(BaseAgent):
                         location=subdomain.strip(),
                     )
                     findings.append(finding)
-        
+
         return findings
 
 

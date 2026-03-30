@@ -36,7 +36,7 @@ HiveRecon is designed for authorized security research. It coordinates recon too
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/HiveRecon.git
+git clone https://github.com/stack-guardian/HiveRecon.git
 cd HiveRecon
 
 # Create virtual environment

@@ -16,7 +16,7 @@ class TestFalsePositiveDetector:
         detector = FalsePositiveDetector()
         finding = Finding(
             finding_type="endpoint",
-            value="https://example.com",
+            location="https://example.com",
             description="Cloudflare access denied page",
             evidence={"raw": "Cloudflare protection enabled"},
         )
@@ -30,7 +30,7 @@ class TestFalsePositiveDetector:
         detector = FalsePositiveDetector()
         finding = Finding(
             finding_type="vulnerability",
-            value="https://example.com/api",
+            location="https://example.com/api",
             severity=FindingSeverity.HIGH,
             title="SQL Injection",
             description="SQL injection in login form",
@@ -44,7 +44,7 @@ class TestFalsePositiveDetector:
         detector = FalsePositiveDetector()
         finding = Finding(
             finding_type="endpoint",
-            value="https://example.com/robots.txt",
+            location="https://example.com/robots.txt",
             description="Common file",
         )
         
@@ -62,12 +62,12 @@ class TestFindingsCorrelator:
         findings = [
             Finding(
                 finding_type="subdomain",
-                value="www.example.com",
+                location="www.example.com",
                 title="Subdomain: www.example.com",
             ),
             Finding(
                 finding_type="subdomain",
-                value="www.example.com",
+                location="www.example.com",
                 title="Subdomain: www.example.com",
             ),
         ]
@@ -81,17 +81,14 @@ class TestFindingsCorrelator:
         findings = [
             Finding(
                 finding_type="subdomain",
-                value="api.example.com",
                 location="https://api.example.com",
             ),
             Finding(
                 finding_type="open_port",
-                value="api.example.com:443",
                 location="https://api.example.com:443",
             ),
             Finding(
                 finding_type="subdomain",
-                value="www.example.com",
                 location="https://www.example.com",
             ),
         ]
@@ -153,7 +150,7 @@ class TestConvenienceFunctions:
         findings = [
             Finding(
                 finding_type="subdomain",
-                value="test.example.com",
+                location="test.example.com",
             ),
         ]
         

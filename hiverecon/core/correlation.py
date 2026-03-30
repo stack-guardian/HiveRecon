@@ -172,10 +172,10 @@ class FalsePositiveDetector:
     def _check_subdomain_fp(self, finding: Finding, evidence: dict) -> float:
         """Check if subdomain finding is likely FP."""
         confidence = 0.0
-        
+
         # Wildcard DNS patterns that create false positives
-        value = finding.value or finding.location or ""
-        
+        value = finding.location or ""
+
         # Check for CDN/provider subdomains that are often wildcards
         cdn_patterns = [
             ".cloudfront.net",
@@ -184,7 +184,7 @@ class FalsePositiveDetector:
             ".gitlab.io",
             ".shopify.com",
         ]
-        
+
         for pattern in cdn_patterns:
             if value.endswith(pattern):
                 confidence = max(confidence, 0.3)  # Not necessarily FP, just note it

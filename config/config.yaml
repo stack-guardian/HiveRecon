@@ -1,0 +1,60 @@
+# HiveRecon Configuration
+
+# AI Settings
+ai:
+  provider: ollama
+  model: qwen2.5:7b
+  base_url: http://localhost:11434
+  temperature: 0.3
+  max_tokens: 4096
+  # Alternative models: llama3, mistral, codellama, qwen2.5:14b
+  
+# Database Settings
+database:
+  path: data/hiverecon.db
+  echo: false
+
+# API Settings
+api:
+  host: 0.0.0.0
+  port: 8080
+  debug: false
+  cors_origins:
+    - http://localhost:3000
+    - http://localhost:8080
+
+# Recon Tool Paths (leave empty to use PATH)
+tools:
+  subfinder: ""
+  amass: ""
+  nmap: ""
+  katana: ""
+  ffuf: ""
+  nuclei: ""
+
+# Scan Settings
+scan:
+  max_concurrent_agents: 5
+  timeout_minutes: 120
+  rate_limit:
+    enabled: true
+    requests_per_second: 10
+  retries: 3
+
+# Logging
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: data/logs/hiverecon.log
+  audit_file: data/audit/audit.log
+
+# Dashboard
+dashboard:
+  enabled: true
+  theme: dark
+
+# Legal & Compliance
+legal:
+  require_acknowledgment: true
+  disclaimer_on_startup: true
+  audit_all_actions: true

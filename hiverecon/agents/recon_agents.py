@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import subprocess
+import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Optional
@@ -126,58 +128,129 @@ class SubdomainAgent(BaseAgent):
 
 class PortScanAgent(BaseAgent):
     """Port scanning agent using nmap."""
-    
+
     agent_type = AgentType.PORT_SCAN
-    
-    def get_command(self) -> str:
+
+    def get_command(self) -> list:
+        """Get nmap command as list for subprocess."""
         ports = self.config.get("ports", "-")
-        return f"nmap -sV -sC -oN - -p {ports} {self.target}"
-    
+        return ["nmap", "-sV", "-oX", "-", "-p", ports, self.target]
+
     async def execute(self) -> bool:
-        """Run port scan."""
+        """Run port scan using subprocess."""
         try:
-            process = await asyncio.create_subprocess_shell(
-                self.get_command(),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            cmd = self.get_command()
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,
             )
-            
-            stdout, stderr = await process.communicate()
-            
-            if stdout:
-                self.output = stdout.decode()
+
+            if result.stdout:
+                self.output = result.stdout
                 self.findings = self.parse_output()
                 return True
             else:
-                self.error = stderr.decode() if stderr else "No output"
+                self.error = result.stderr if result.stderr else "No output"
                 return False
-                
+
+        except subprocess.TimeoutExpired:
+            self.error = "Nmap scan timed out after 300 seconds"
+            return False
         except Exception as e:
             self.error = str(e)
             return False
-    
+
     def parse_output(self) -> list[Finding]:
-        """Parse nmap output into findings."""
+        """Parse nmap XML output into findings."""
         findings = []
-        
+
         if not self.output:
             return findings
-        
-        # Simple parsing - look for open ports
-        current_port = None
+
+        try:
+            root = ET.fromstring(self.output)
+            
+            for host in root.findall(".//host"):
+                # Get host address
+                addr_elem = host.find("address")
+                if addr_elem is not None:
+                    ip_addr = addr_elem.get("addr", "unknown")
+                else:
+                    ip_addr = "unknown"
+
+                # Get ports
+                ports_elem = host.find("ports")
+                if ports_elem is not None:
+                    for port_elem in ports_elem.findall("port"):
+                        port_id = port_elem.get("portid", "unknown")
+                        protocol = port_elem.get("protocol", "tcp")
+                        
+                        state_elem = port_elem.find("state")
+                        if state_elem is not None and state_elem.get("state") == "open":
+                            service_elem = port_elem.find("service")
+                            service_name = "unknown"
+                            service_product = ""
+                            service_version = ""
+                            
+                            if service_elem is not None:
+                                service_name = service_elem.get("name", "unknown")
+                                service_product = service_elem.get("product", "")
+                                service_version = service_elem.get("version", "")
+                            
+                            service_info = service_name
+                            if service_product:
+                                service_info = f"{service_product} {service_version}".strip()
+                            
+                            # Determine severity based on port
+                            severity = FindingSeverity.INFO
+                            if port_id in ["21", "22", "23", "3389"]:
+                                severity = FindingSeverity.LOW
+                            elif port_id in ["1433", "3306", "5432", "27017"]:
+                                severity = FindingSeverity.MEDIUM
+
+                            finding = Finding(
+                                agent_type=self.agent_type,
+                                finding_type="open_port",
+                                severity=severity,
+                                title=f"Open port {port_id}/{protocol} detected",
+                                description=f"Service: {service_info}",
+                                evidence={
+                                    "ip": ip_addr,
+                                    "port": port_id,
+                                    "protocol": protocol,
+                                    "service": service_name,
+                                    "product": service_product,
+                                    "version": service_version,
+                                },
+                                location=f"{ip_addr}:{port_id}",
+                            )
+                            findings.append(finding)
+        except ET.ParseError as e:
+            # Fallback to simple text parsing if XML parsing fails
+            findings.extend(self._parse_text_output())
+        except Exception as e:
+            self.error = f"Error parsing nmap output: {str(e)}"
+
+        return findings
+
+    def _parse_text_output(self) -> list[Finding]:
+        """Fallback text-based parsing for nmap output."""
+        findings = []
         for line in self.output.split("\n"):
             if "/tcp" in line and "open" in line:
                 parts = line.split()
                 if parts:
                     port = parts[0].split("/")[0]
                     service = " ".join(parts[2:]) if len(parts) > 2 else "unknown"
-                    
+
                     severity = FindingSeverity.INFO
                     if port in ["21", "22", "23", "3389"]:
                         severity = FindingSeverity.LOW
                     elif port in ["1433", "3306", "5432", "27017"]:
                         severity = FindingSeverity.MEDIUM
-                    
+
                     finding = Finding(
                         agent_type=self.agent_type,
                         finding_type="open_port",
@@ -188,7 +261,6 @@ class PortScanAgent(BaseAgent):
                         location=f"{self.target}:{port}",
                     )
                     findings.append(finding)
-        
         return findings
 
 

@@ -42,7 +42,7 @@ HiveRecon is an AI-powered reconnaissance framework designed for bug bounty hunt
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/hiverecon.git
+git clone https://github.com/stack-guardian/hiverecon.git
 cd hiverecon
 
 # Start with Docker Compose

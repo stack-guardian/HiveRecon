@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
@@ -9,6 +10,11 @@ from datetime import datetime
 from typing import Any, Optional
 
 from hiverecon.database import AgentType, Finding, FindingSeverity, ScanStatus
+
+
+def check_binary(name: str) -> bool:
+    """Check if a binary is available on the system."""
+    return shutil.which(name) is not None
 
 
 class BaseAgent(ABC):
@@ -56,6 +62,9 @@ class SubdomainAgent(BaseAgent):
     async def execute(self) -> bool:
         """Run subdomain enumeration using subprocess."""
         try:
+            if not check_binary(self.tool):
+                self.error = f"{self.tool} is not installed. Install it first."
+                return False
             cmd = self.get_command()
             result = subprocess.run(
                 cmd,
@@ -137,12 +146,15 @@ class PortScanAgent(BaseAgent):
 
     def get_command(self) -> list:
         """Get nmap command as list for subprocess."""
-        ports = self.config.get("ports", "-")
+        ports = self.config.get("ports", "1-1000")
         return ["nmap", "-sV", "-oX", "-", "-p", ports, self.target]
 
     async def execute(self) -> bool:
         """Run port scan using subprocess."""
         try:
+            if not check_binary("nmap"):
+                self.error = "nmap is not installed. Run: sudo pacman -S nmap"
+                return False
             cmd = self.get_command()
             result = subprocess.run(
                 cmd,
@@ -270,41 +282,41 @@ class PortScanAgent(BaseAgent):
 
 class EndpointDiscoveryAgent(BaseAgent):
     """Endpoint discovery agent using katana/ffuf."""
-    
+
     agent_type = AgentType.ENDPOINT
-    
+
     def __init__(self, target: str, config: Optional[dict] = None):
         super().__init__(target, config)
         self.tool = self.config.get("tool", "katana")  # or "ffuf"
         self.wordlist = self.config.get("wordlist", "/usr/share/wordlists/dirb/common.txt")
-    
-    def get_command(self) -> str:
+
+    def get_command(self) -> list:
+        """Get endpoint discovery command as list for subprocess."""
         if self.tool == "ffuf":
-            return (
-                f"ffuf -u https://{self.target}/FUZZ "
-                f"-w {self.wordlist} -o stdout -of json"
-            )
-        return f"katana -u https://{self.target} -jc -silent -json"
-    
+            return ["ffuf", "-u", f"https://{self.target}/FUZZ",
+                    "-w", self.wordlist, "-o", "stdout", "-of", "json"]
+        return ["katana", "-u", f"https://{self.target}", "-jc", "-silent", "-json"]
+
     async def execute(self) -> bool:
-        """Run endpoint discovery."""
+        """Run endpoint discovery using subprocess."""
         try:
-            process = await asyncio.create_subprocess_shell(
+            if not check_binary(self.tool):
+                self.error = f"{self.tool} is not installed."
+                return False
+            result = subprocess.run(
                 self.get_command(),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                capture_output=True, text=True, timeout=300
             )
-            
-            stdout, stderr = await process.communicate()
-            
-            if stdout:
-                self.output = stdout.decode()
+            if result.stdout:
+                self.output = result.stdout
                 self.findings = self.parse_output()
                 return True
             else:
-                self.error = stderr.decode() if stderr else "No output"
+                self.error = result.stderr or "No output"
                 return False
-                
+        except subprocess.TimeoutExpired:
+            self.error = "Endpoint discovery timed out"
+            return False
         except Exception as e:
             self.error = str(e)
             return False
@@ -361,39 +373,40 @@ class EndpointDiscoveryAgent(BaseAgent):
 
 class VulnerabilityScanAgent(BaseAgent):
     """Vulnerability scanning agent using nuclei."""
-    
+
     agent_type = AgentType.VULNERABILITY
-    
-    def get_command(self) -> str:
+
+    def get_command(self) -> list:
+        """Get nuclei command as list for subprocess."""
+        cmd = ["nuclei", "-u", f"https://{self.target}", "-json"]
         templates = self.config.get("templates", "")
         severity_filter = self.config.get("severity_filter", "")
-        
-        cmd = f"nuclei -u https://{self.target} -json"
         if templates:
-            cmd += f" -t {templates}"
+            cmd += ["-t", templates]
         if severity_filter:
-            cmd += f" -severity {severity_filter}"
+            cmd += ["-severity", severity_filter]
         return cmd
-    
+
     async def execute(self) -> bool:
-        """Run vulnerability scan."""
+        """Run vulnerability scan using subprocess."""
         try:
-            process = await asyncio.create_subprocess_shell(
+            if not check_binary("nuclei"):
+                self.error = "nuclei is not installed."
+                return False
+            result = subprocess.run(
                 self.get_command(),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                capture_output=True, text=True, timeout=300
             )
-            
-            stdout, stderr = await process.communicate()
-            
-            if stdout:
-                self.output = stdout.decode()
+            if result.stdout:
+                self.output = result.stdout
                 self.findings = self.parse_output()
                 return True
             else:
-                self.error = stderr.decode() if stderr else "No output"
+                self.error = result.stderr or "No output"
                 return False
-                
+        except subprocess.TimeoutExpired:
+            self.error = "Vulnerability scan timed out"
+            return False
         except Exception as e:
             self.error = str(e)
             return False
@@ -439,47 +452,79 @@ class VulnerabilityScanAgent(BaseAgent):
 
 
 class MCPServerAgent(BaseAgent):
-    """
-    MCP (Model Context Protocol) server agent for browser-based analysis.
-    
-    This agent uses MCP to perform deep browser-based bug analysis,
-    including JavaScript execution, DOM analysis, and client-side vulnerability detection.
-    """
-    
+    """Browser-based analysis using requests and BeautifulSoup as MCP placeholder."""
+
     agent_type = AgentType.MCP
-    
-    def get_command(self) -> str:
-        return f"mcp-client --target {self.target} --deep-analysis"
-    
+
+    def get_command(self) -> list:
+        return ["curl", "-sI", f"https://{self.target}"]
+
     async def execute(self) -> bool:
-        """Run MCP-based analysis."""
-        # Placeholder - actual MCP integration
+        """Run HTTP header check using subprocess."""
         try:
-            # Simulate MCP analysis
-            self.output = f"MCP analysis completed for {self.target}"
-            self.findings = self.parse_output()
-            return True
+            if not check_binary("curl"):
+                self.error = "curl is not installed."
+                return False
+            result = subprocess.run(
+                self.get_command(),
+                capture_output=True, text=True, timeout=30
+            )
+            if result.stdout:
+                self.output = result.stdout
+                self.findings = self.parse_output()
+                return True
+            else:
+                self.error = result.stderr or "No output"
+                return False
+        except subprocess.TimeoutExpired:
+            self.error = "HTTP header check timed out"
+            return False
         except Exception as e:
             self.error = str(e)
             return False
-    
+
     def parse_output(self) -> list[Finding]:
-        """Parse MCP analysis results."""
-        # Placeholder - actual implementation will parse MCP output
+        """Parse HTTP headers for security analysis."""
         findings = []
-        
-        # Example: Client-side vulnerability detection
-        finding = Finding(
-            agent_type=self.agent_type,
-            finding_type="mcp_analysis",
-            severity=FindingSeverity.INFO,
-            title="MCP Browser Analysis Completed",
-            description="Deep browser-based analysis completed. Check for client-side vulnerabilities.",
-            evidence={"target": self.target, "analysis_type": "browser-based"},
-            location=f"https://{self.target}",
-        )
-        findings.append(finding)
-        
+        if not self.output:
+            return findings
+
+        headers = {}
+        for line in self.output.strip().split("\n"):
+            if ":" in line:
+                key, _, value = line.partition(":")
+                headers[key.strip().lower()] = value.strip()
+
+        security_headers = {
+            "x-frame-options": "Missing X-Frame-Options header (clickjacking risk)",
+            "x-content-type-options": "Missing X-Content-Type-Options header",
+            "strict-transport-security": "Missing HSTS header",
+            "content-security-policy": "Missing Content-Security-Policy header",
+        }
+
+        for header, message in security_headers.items():
+            if header not in headers:
+                findings.append(Finding(
+                    agent_type=self.agent_type,
+                    finding_type="missing_security_header",
+                    severity=FindingSeverity.LOW,
+                    title=message,
+                    description=f"The {header} header was not found in the HTTP response.",
+                    evidence={"headers_found": list(headers.keys())},
+                    location=f"https://{self.target}",
+                ))
+
+        if not findings:
+            findings.append(Finding(
+                agent_type=self.agent_type,
+                finding_type="header_analysis",
+                severity=FindingSeverity.INFO,
+                title="HTTP security headers look good",
+                description="All major security headers are present.",
+                evidence={"headers": headers},
+                location=f"https://{self.target}",
+            ))
+
         return findings
 
 

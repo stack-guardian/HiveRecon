@@ -452,12 +452,12 @@ class VulnerabilityScanAgent(BaseAgent):
 
 
 class MCPServerAgent(BaseAgent):
-    """Browser-based analysis using requests and BeautifulSoup as MCP placeholder."""
+    """Browser-based analysis using curl for HTTP header security analysis."""
 
     agent_type = AgentType.MCP
 
     def get_command(self) -> list:
-        return ["curl", "-sI", f"https://{self.target}"]
+        return ["curl", "-sI", "--connect-timeout", "15", f"http://{self.target}"]
 
     async def execute(self) -> bool:
         """Run HTTP header check using subprocess."""

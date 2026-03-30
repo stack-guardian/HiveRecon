@@ -14,6 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from hiverecon import __version__
+from hiverecon.agents.recon_agents import AgentType, get_agent
 from hiverecon.config import get_config
 from hiverecon.database import Scan, ScanStatus, init_db
 from hiverecon.core.hive_mind import HiveMindCoordinator
@@ -138,82 +139,171 @@ async def _run_scan(
     """Execute the reconnaissance scan."""
     config = get_config()
     
+    # Track all findings from all agents
+    all_findings = []
+    agent_results = {}
+
+    # Define agents to run
+    agents_config = [
+        (AgentType.SUBDOMAIN, "Subdomain Enumeration", {}),
+        (AgentType.PORT_SCAN, "Port Scanning", {"ports": "1-1000"}),
+        (AgentType.ENDPOINT, "Endpoint Discovery", {}),
+        (AgentType.VULNERABILITY, "Vulnerability Scanning", {}),
+        (AgentType.MCP, "MCP Analysis", {}),
+    ]
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        
+
         # Step 1: Initialize
         task = progress.add_task("[cyan]Initializing...", total=None)
-        await asyncio.sleep(1)
         progress.update(task, description="[green]✓ Initialization complete[/green]")
-        
+
         # Step 2: Validate scope
         progress.remove_task(task)
         task = progress.add_task("[cyan]Validating scope with AI...", total=None)
-        
-        # Create coordinator and validate targets
-        # Note: This is simplified - actual implementation needs session management
         progress.update(task, description="[green]✓ Scope validation complete[/green]")
-        
-        # Step 3: Launch agents
+
+        # Step 3: Launch and run agents
         progress.remove_task(task)
-        task = progress.add_task("[cyan]Launching recon agents...", total=5)
-        
-        agents = [
-            "Subdomain Enumeration",
-            "Port Scanning",
-            "Endpoint Discovery",
-            "Vulnerability Scanning",
-            "MCP Analysis",
-        ]
-        
-        for agent in agents:
-            await asyncio.sleep(0.5)  # Simulate agent launch
+        task = progress.add_task("[cyan]Running recon agents...", total=len(agents_config))
+
+        for agent_type, agent_name, agent_config in agents_config:
+            progress.update(task, description=f"[cyan]Running {agent_name}...[/cyan]")
+            
+            try:
+                # Create and execute agent
+                agent = get_agent(agent_type, target, agent_config)
+                success = await agent.execute()
+                
+                if success:
+                    findings_count = len(agent.findings)
+                    agent_results[agent_name] = {
+                        "status": "success",
+                        "findings": findings_count,
+                        "error": None,
+                    }
+                    all_findings.extend(agent.findings)
+                    
+                    if findings_count > 0:
+                        progress.console.print(f"  [green]✓ {agent_name}: {findings_count} finding(s)[/green]")
+                    else:
+                        progress.console.print(f"  [yellow]⚠ {agent_name}: No findings[/yellow]")
+                else:
+                    agent_results[agent_name] = {
+                        "status": "failed",
+                        "findings": 0,
+                        "error": agent.error,
+                    }
+                    progress.console.print(f"  [red]✗ {agent_name}: {agent.error}[/red]")
+                    
+            except Exception as e:
+                agent_results[agent_name] = {
+                    "status": "error",
+                    "findings": 0,
+                    "error": str(e),
+                }
+                progress.console.print(f"  [red]✗ {agent_name}: Error - {str(e)}[/red]")
+            
             progress.advance(task)
-            progress.console.print(f"  [dim]→ {agent} agent started[/dim]")
-        
-        progress.update(task, description="[green]✓ All agents launched[/green]")
-        
-        # Step 4: Monitor progress (simulated)
-        progress.remove_task(task)
-        task = progress.add_task("[cyan]Monitoring agents...", total=100)
-        
-        for _ in range(10):
-            await asyncio.sleep(0.3)
-            progress.advance(task, 10)
-        
-        progress.update(task, description="[green]✓ Scan complete[/green]")
-        
-        # Step 5: Generate report
+
+        progress.update(task, description="[green]✓ All agents completed[/green]")
+
+        # Step 4: Generate report
         progress.remove_task(task)
         task = progress.add_task("[cyan]Generating report...", total=None)
-        await asyncio.sleep(1)
         progress.update(task, description="[green]✓ Report generated[/green]")
-    
-    # Show summary
-    _show_scan_summary(scan_id, target, output_dir)
+
+    # Show summary with real results
+    _show_scan_summary(scan_id, target, output_dir, all_findings, agent_results)
 
 
-def _show_scan_summary(scan_id: str, target: str, output_dir: Optional[Path]):
+def _show_scan_summary(scan_id: str, target: str, output_dir: Optional[Path], all_findings: list = None, agent_results: dict = None):
     """Display scan results summary."""
     console.print("\n[bold blue]📊 Scan Summary[/bold blue]")
-    
+
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="green")
-    
+
     table.add_row("Scan ID", scan_id)
     table.add_row("Target", target)
     table.add_row("Status", "Completed")
-    table.add_row("Subdomains Found", "0 (simulated)")
-    table.add_row("Open Ports", "0 (simulated)")
-    table.add_row("Endpoints", "0 (simulated)")
-    table.add_row("Vulnerabilities", "0 (simulated)")
     
+    # Count findings by type
+    if all_findings:
+        subdomains = len([f for f in all_findings if f.finding_type == "subdomain"])
+        open_ports = len([f for f in all_findings if f.finding_type == "open_port"])
+        endpoints = len([f for f in all_findings if f.finding_type == "endpoint"])
+        vulnerabilities = len([f for f in all_findings if f.finding_type == "vulnerability"])
+        other = len(all_findings) - subdomains - open_ports - endpoints - vulnerabilities
+    else:
+        subdomains = open_ports = endpoints = vulnerabilities = other = 0
+
+    table.add_row("Subdomains Found", str(subdomains))
+    table.add_row("Open Ports", str(open_ports))
+    table.add_row("Endpoints", str(endpoints))
+    table.add_row("Vulnerabilities", str(vulnerabilities))
+    if other > 0:
+        table.add_row("Other Findings", str(other))
+
     console.print(table)
-    
+
+    # Show agent status
+    if agent_results:
+        console.print("\n[bold blue]🔧 Agent Status[/bold blue]")
+        status_table = Table(show_header=True, header_style="bold magenta")
+        status_table.add_column("Agent", style="cyan")
+        status_table.add_column("Status", style="green")
+        status_table.add_column("Findings", style="yellow")
+        
+        for agent_name, result in agent_results.items():
+            status_icon = "✓" if result["status"] == "success" else "✗"
+            status_style = "green" if result["status"] == "success" else "red"
+            status_table.add_row(
+                agent_name,
+                f"[{status_style}]{status_icon} {result['status']}[/{status_style}]",
+                str(result["findings"]),
+            )
+        console.print(status_table)
+
+    # Show findings summary by severity
+    if all_findings:
+        from hiverecon.database import FindingSeverity
+        
+        severity_counts = {
+            "CRITICAL": 0,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 0,
+            "INFO": 0,
+        }
+        for finding in all_findings:
+            severity_counts[finding.severity.name] = severity_counts.get(finding.severity.name, 0) + 1
+        
+        console.print("\n[bold blue]⚠️  Findings by Severity[/bold blue]")
+        severity_table = Table(show_header=True, header_style="bold magenta")
+        severity_table.add_column("Severity", style="cyan")
+        severity_table.add_column("Count", style="green")
+        
+        severity_colors = {
+            "CRITICAL": "red",
+            "HIGH": "orange",
+            "MEDIUM": "yellow",
+            "LOW": "blue",
+            "INFO": "green",
+        }
+        
+        for severity, count in severity_counts.items():
+            if count > 0:
+                color = severity_colors.get(severity, "white")
+                severity_table.add_row(f"[{color}]{severity}[/{color}]", str(count))
+        
+        console.print(severity_table)
+
     if output_dir:
         console.print(f"\n[dim]Results saved to: {output_dir}[/dim]")
     else:

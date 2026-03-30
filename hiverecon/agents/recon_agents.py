@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -51,7 +52,7 @@ class SubdomainAgent(BaseAgent):
 
     def __init__(self, target: str, config: Optional[dict] = None):
         super().__init__(target, config)
-        self.tool = self.config.get("tool", "subfinder")  # or "amass"
+        self.tool = self.config.get("tool", "auto")  # auto, subfinder, or amass
 
     def get_command(self) -> list:
         """Get subfinder/amass command as list for subprocess."""
@@ -60,11 +61,22 @@ class SubdomainAgent(BaseAgent):
         return ["subfinder", "-d", self.target, "-silent", "-json"]
 
     async def execute(self) -> bool:
-        """Run subdomain enumeration using subprocess."""
+        """Run subdomain enumeration using subprocess with auto-fallback."""
         try:
-            if not check_binary(self.tool):
-                self.error = f"{self.tool} is not installed. Install it first."
+            # Auto-detect: try subfinder first, then amass
+            if self.tool == "auto":
+                if check_binary("subfinder"):
+                    self.tool = "subfinder"
+                elif check_binary("amass"):
+                    self.tool = "amass"
+                else:
+                    self.error = "Neither subfinder nor amass is installed. Install one: go install github.com/projectdiscovery/subfinder or yay -S amass"
+                    return False
+            elif not check_binary(self.tool):
+                install_cmd = "go install github.com/projectdiscovery/subfinder@latest" if self.tool == "subfinder" else "yay -S amass"
+                self.error = f"{self.tool} is not installed. Install with: {install_cmd}"
                 return False
+            
             cmd = self.get_command()
             result = subprocess.run(
                 cmd,
@@ -146,7 +158,7 @@ class PortScanAgent(BaseAgent):
 
     def get_command(self) -> list:
         """Get nmap command as list for subprocess."""
-        ports = self.config.get("ports", "1-1000")
+        ports = self.config.get("ports", "1-100")  # Default to top 100 ports for speed
         return ["nmap", "-sV", "-oX", "-", "-p", ports, self.target]
 
     async def execute(self) -> bool:
@@ -287,7 +299,7 @@ class EndpointDiscoveryAgent(BaseAgent):
 
     def __init__(self, target: str, config: Optional[dict] = None):
         super().__init__(target, config)
-        self.tool = self.config.get("tool", "katana")  # or "ffuf"
+        self.tool = self.config.get("tool", "auto")  # auto, katana, or ffuf
         self.wordlist = self.config.get("wordlist", "/usr/share/wordlists/dirb/common.txt")
 
     def get_command(self) -> list:
@@ -298,11 +310,27 @@ class EndpointDiscoveryAgent(BaseAgent):
         return ["katana", "-u", f"https://{self.target}", "-jc", "-silent", "-json"]
 
     async def execute(self) -> bool:
-        """Run endpoint discovery using subprocess."""
+        """Run endpoint discovery using subprocess with auto-detection."""
         try:
-            if not check_binary(self.tool):
-                self.error = f"{self.tool} is not installed."
+            # Auto-detect: try katana first, then ffuf
+            if self.tool == "auto":
+                if check_binary("katana"):
+                    self.tool = "katana"
+                elif check_binary("ffuf"):
+                    self.tool = "ffuf"
+                else:
+                    self.error = "Neither katana nor ffuf is installed. Install: go install github.com/projectdiscovery/katana or yay -S ffuf"
+                    return False
+            elif not check_binary(self.tool):
+                install_cmd = "go install github.com/projectdiscovery/katana@latest" if self.tool == "katana" else "yay -S ffuf"
+                self.error = f"{self.tool} is not installed. Install with: {install_cmd}"
                 return False
+            
+            # Validate wordlist for ffuf
+            if self.tool == "ffuf" and not os.path.exists(self.wordlist):
+                self.error = f"Wordlist not found: {self.wordlist}"
+                return False
+            
             result = subprocess.run(
                 self.get_command(),
                 capture_output=True, text=True, timeout=300
@@ -391,7 +419,7 @@ class VulnerabilityScanAgent(BaseAgent):
         """Run vulnerability scan using subprocess."""
         try:
             if not check_binary("nuclei"):
-                self.error = "nuclei is not installed."
+                self.error = "nuclei is not installed. Install with: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"
                 return False
             result = subprocess.run(
                 self.get_command(),
@@ -456,26 +484,34 @@ class MCPServerAgent(BaseAgent):
 
     agent_type = AgentType.MCP
 
-    def get_command(self) -> list:
-        return ["curl", "-sI", "--connect-timeout", "15", f"http://{self.target}"]
+    def get_command(self, scheme: str = "https") -> list:
+        return ["curl", "-sI", "--connect-timeout", "15", "--max-time", "30", f"{scheme}://{self.target}"]
 
     async def execute(self) -> bool:
-        """Run HTTP header check using subprocess."""
+        """Run HTTP header check using subprocess, trying HTTPS first then HTTP."""
         try:
             if not check_binary("curl"):
                 self.error = "curl is not installed."
                 return False
-            result = subprocess.run(
-                self.get_command(),
-                capture_output=True, text=True, timeout=30
-            )
-            if result.stdout:
-                self.output = result.stdout
-                self.findings = self.parse_output()
-                return True
-            else:
-                self.error = result.stderr or "No output"
-                return False
+            
+            # Try HTTPS first, then fall back to HTTP
+            self.output = ""
+            for scheme in ["https", "http"]:
+                try:
+                    result = subprocess.run(
+                        self.get_command(scheme),
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if result.stdout and "HTTP/" in result.stdout:
+                        self.output = result.stdout
+                        self.findings = self.parse_output()
+                        return True
+                except subprocess.TimeoutExpired:
+                    continue
+            
+            self.error = "Both HTTPS and HTTP connection attempts timed out"
+            return False
+            
         except subprocess.TimeoutExpired:
             self.error = "HTTP header check timed out"
             return False

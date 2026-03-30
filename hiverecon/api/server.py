@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 from hiverecon import __version__
 from hiverecon.config import get_config
 from hiverecon.database import Scan, ScanStatus, init_db, Finding, FindingSeverity
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
 from hiverecon.core import (
     HiveMindCoordinator,
     get_audit_logger,

@@ -1,56 +1,42 @@
-import axios from 'axios';
+const BASE_URL = "http://localhost:8080"
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+export async function getHealth() {
+  const res = await fetch(`${BASE_URL}/health`)
+  return res.json()
+}
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+export async function getStats() {
+  const res = await fetch(`${BASE_URL}/stats`)
+  return res.json()
+}
 
-// Health check
-export const healthCheck = async () => {
-  const response = await api.get('/health');
-  return response.data;
-};
+export async function getScans() {
+  const res = await fetch(`${BASE_URL}/scans`)
+  const data = await res.json()
+  return data.scans ?? []
+}
 
-// Scans
-export const getScans = async (params = {}) => {
-  const response = await api.get('/scans', { params });
-  return response.data;
-};
+export async function getScan(id) {
+  const res = await fetch(`${BASE_URL}/scans/${id}`)
+  return res.json()
+}
 
-export const getScan = async (scanId) => {
-  const response = await api.get(`/scans/${scanId}`);
-  return response.data;
-};
+export async function createScan(target, platform) {
+  const res = await fetch(`${BASE_URL}/scans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target, platform_id: platform })
+  })
+  return res.json()
+}
 
-export const createScan = async (data) => {
-  const response = await api.post('/scans', data);
-  return response.data;
-};
+export async function getFindings() {
+  const res = await fetch(`${BASE_URL}/findings`)
+  const data = await res.json()
+  return data.findings ?? []
+}
 
-export const cancelScan = async (scanId) => {
-  const response = await api.delete(`/scans/${scanId}`);
-  return response.data;
-};
-
-// Findings
-export const getFindings = async (params = {}) => {
-  const response = await api.get('/findings', { params });
-  return response.data;
-};
-
-export const getScanFindings = async (scanId, params = {}) => {
-  const response = await api.get(`/scans/${scanId}/findings`, { params });
-  return response.data;
-};
-
-// Statistics
-export const getStats = async () => {
-  const response = await api.get('/stats');
-  return response.data;
-};
-
-export default api;
+export async function cancelScan(id) {
+  const res = await fetch(`${BASE_URL}/scans/${id}`, { method: "DELETE" })
+  return res.json()
+}

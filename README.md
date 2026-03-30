@@ -66,9 +66,29 @@ docker-compose up -d
 
 ## Usage
 
-### CLI
+### 🖥️ GUI Interface (Recommended for Non-Technical Users)
+
+Launch the graphical interface:
 
 ```bash
+# From applications menu, search for "HiveRecon Scanner"
+# Or run from terminal:
+/home/vibhxr/hiverecon/hivereon-gui.sh
+```
+
+**GUI Features:**
+- Simple menu-driven interface
+- Legal disclaimer acknowledgment
+- Tool status checker
+- Quick scan (ports 1-100) and Full scan (ports 1-1000) options
+- Real-time scan results
+
+### CLI (For Technical Users)
+
+```bash
+# Activate virtual environment
+source /home/vibhxr/hiverecon/venv/bin/activate
+
 # Start a scan
 python -m hiverecon scan -t example.com
 

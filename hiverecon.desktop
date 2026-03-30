@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=HiveRecon Scanner
 Comment=AI-Powered Bug Bounty Reconnaissance Framework
-Exec=/home/vibhxr/hiverecon/hiverecon.sh scan -t %U
+Exec=/home/vibhxr/hiverecon/hiverecon-gui.sh
 Icon=network-workgroup
 Terminal=true
 Type=Application

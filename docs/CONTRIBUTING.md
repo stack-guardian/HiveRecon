@@ -20,7 +20,7 @@ Thank you for your interest in contributing to HiveRecon! This document provides
 
 ```bash
 # Clone your fork
-git clone https://github.com/yourusername/hiverecon.git
+git clone https://github.com/stack-guardian/hiverecon.git
 cd hiverecon
 
 # Install in development mode

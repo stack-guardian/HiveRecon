@@ -1,33 +1,70 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
-# Install system dependencies including nmap
-RUN apt-get update && apt-get install -y \
-    nmap \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
 
-# Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        unzip \
+        nmap \
+        ca-certificates \
+        libpango-1.0-0 \
+        libpangocairo-1.0-0 \
+        libcairo2 \
+        libgdk-pixbuf-2.0-0 \
+        libffi-dev \
+        shared-mime-info \
+        libpcap-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+ARG SUBFINDER_VERSION=2.6.6
+ARG NUCLEI_VERSION=3.3.6
+ARG KATANA_VERSION=1.1.0
 
-# Copy application code
+RUN curl -fsSL "https://github.com/projectdiscovery/subfinder/releases/download/v${SUBFINDER_VERSION}/subfinder_${SUBFINDER_VERSION}_linux_amd64.zip" -o /tmp/subfinder.zip \
+    && unzip -o /tmp/subfinder.zip subfinder -d /usr/local/bin/ \
+    && rm /tmp/subfinder.zip \
+    && chmod +x /usr/local/bin/subfinder \
+    && curl -fsSL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip" -o /tmp/nuclei.zip \
+    && unzip -o /tmp/nuclei.zip nuclei -d /usr/local/bin/ \
+    && rm /tmp/nuclei.zip \
+    && chmod +x /usr/local/bin/nuclei \
+    && curl -fsSL "https://github.com/projectdiscovery/katana/releases/download/v${KATANA_VERSION}/katana_${KATANA_VERSION}_linux_amd64.zip" -o /tmp/katana.zip \
+    && unzip -o /tmp/katana.zip katana -d /usr/local/bin/ \
+    && rm /tmp/katana.zip \
+    && chmod +x /usr/local/bin/katana
+
+COPY pyproject.toml ./
+
+RUN python - <<'PY' > /tmp/requirements.txt
+import tomllib
+from pathlib import Path
+
+project = tomllib.loads(Path("pyproject.toml").read_text())
+for dependency in project["project"]["dependencies"]:
+    print(dependency)
+
+for dependency in project["project"].get("optional-dependencies", {}).get("dev", []):
+    if dependency.startswith("pytest"):
+        print(dependency)
+PY
+
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
+
 COPY . .
 
-# Install hiverecon in editable mode
-RUN pip install -e .
+RUN pip install --no-cache-dir . \
+    && mkdir -p /app/reports /app/data/logs /app/data/audit \
+    && adduser --system --no-create-home hiverecon \
+    && chown -R hiverecon:nogroup /app
 
-# Create data directory
-RUN mkdir -p /app/data
+USER hiverecon
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV HIVERECON_DB_URL=sqlite+aiosqlite:///app/data/hiverecon.db
+EXPOSE 8000
 
-# Default command
-CMD ["python", "-m", "hiverecon", "--help"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

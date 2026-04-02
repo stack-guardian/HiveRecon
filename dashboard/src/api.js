@@ -21,11 +21,11 @@ export async function getScan(id) {
   return res.json()
 }
 
-export async function createScan(target, platform) {
+export async function createScan(target, platform, scopeConfig) {
   const res = await fetch(`${BASE_URL}/scans`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target, platform_id: platform })
+    body: JSON.stringify({ target, platform_id: platform, scope_config: scopeConfig })
   })
   return res.json()
 }

@@ -105,11 +105,25 @@ class Config(BaseSettings):
         else:
             yaml_data = {}
         
-        # Merge YAML data with environment variables
-        return cls(**yaml_data)
+        config = cls(**yaml_data)
+
+        if config.ollama_base_url:
+            config.ai.base_url = config.ollama_base_url
+        if config.ai_model:
+            config.ai.model = config.ai_model
+        if config.api_host:
+            config.api.host = config.api_host
+        if config.api_port:
+            config.api.port = config.api_port
+
+        return config
     
     def get_database_url(self) -> str:
         """Get the database URL."""
+        # Prioritize DATABASE_URL environment variable
+        env_url = os.environ.get("DATABASE_URL")
+        if env_url:
+            return env_url
         if self.database_url:
             return self.database_url
         return f"sqlite+aiosqlite:///{self.database.path}"

@@ -1,87 +1,29 @@
-version: '3.8'
-
 services:
-  # Main HiveRecon service
-  hiverecon:
+  app:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: hiverecon
-    ports:
-      - "8080:8080"
-    volumes:
-      # Persist data
-      - ./data:/app/data
-      # Mount config
-      - ./config:/app/config:ro
-      # Mount reports
-      - ./reports:/app/reports
-    environment:
-      - DATABASE_URL=sqlite+aiosqlite:///app/data/hiverecon.db
-      - API_HOST=0.0.0.0
-      - API_PORT=8080
-      - LOG_LEVEL=INFO
-      # AI Configuration
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - AI_MODEL=qwen2.5:7b
     depends_on:
-      ollama:
-        condition: service_healthy
-    networks:
-      - hiverecon-network
-    restart: unless-stopped
-    # Security note: Running as root for tool compatibility
-    # For production, configure proper file permissions
-    security_opt:
-      - no-new-privileges:true
-
-  # Ollama for local AI (optional - can use external)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: hiverecon-ollama
+      - ollama
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      DATABASE_URL: sqlite+aiosqlite:///./hiverecon.db
+    ports:
+      - "8000:8000"
     volumes:
-      - ollama_data:/root/.ollama
+      - ./reports:/app/reports
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  ollama:
+    image: ollama/ollama
     ports:
       - "11434:11434"
-    networks:
-      - hiverecon-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    # Uncomment for GPU support
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
-  # Dashboard (optional - can run separately)
-  dashboard:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-    container_name: hiverecon-dashboard
-    ports:
-      - "3000:80"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8080
-    depends_on:
-      - hiverecon
-    networks:
-      - hiverecon-network
-    restart: unless-stopped
-    profiles:
-      - with-dashboard
-
-networks:
-  hiverecon-network:
-    driver: bridge
+    volumes:
+      - ollama_data:/root/.ollama
 
 volumes:
   ollama_data:

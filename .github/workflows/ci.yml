@@ -1,41 +1,32 @@
 name: CI
-
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
-
+    branches: [ main ]
 jobs:
-  test:
+  python-checks:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Lint with ruff
-      run: |
-        ruff check .
-
-    - name: Run tests
-      run: |
-        pytest tests/test_parsers.py tests/test_correlation.py -v
-
-    - name: Run integration tests (tools)
-      run: |
-        python tests/test_tools_execution.py || true
-      continue-on-error: true
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run ruff
+        run: ruff check .
+      - name: Run mypy
+        run: mypy hiverecon/
+      - name: Run pytest
+        run: pytest --asyncio-mode=auto tests/
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Docker Compose build
+        run: docker compose build

@@ -5,9 +5,15 @@ import NewScan from "./pages/NewScan"
 import Findings from "./pages/Findings"
 import ScanMonitor from "./pages/ScanMonitor"
 import Settings from "./pages/Settings"
+import LegalDisclaimer from "./pages/LegalDisclaimer"
+import ScopeConfig from "./pages/ScopeConfig"
+import Welcome from "./pages/Welcome"
 
 export default function App() {
+  const [stage, setStage] = useState("welcome")
   const [page, setPage] = useState("dashboard")
+
+  const handleStart = () => setStage("legal")
 
   const renderPage = () => {
     if (page === "dashboard") return <Dashboard />
@@ -16,6 +22,10 @@ export default function App() {
     if (page === "findings") return <Findings />
     if (page === "settings") return <Settings />
   }
+
+  if (stage === "welcome") return <Welcome onStart={handleStart} />
+  if (stage === "legal") return <LegalDisclaimer onAccept={() => setStage("scope")} />
+  if (stage === "scope") return <ScopeConfig onDone={() => setStage("app")} />
 
   return (
     <div className="flex h-screen bg-zinc-950 text-white overflow-hidden">

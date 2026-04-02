@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 import shutil
-import subprocess
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -63,39 +62,41 @@ class SubdomainAgent(BaseAgent):
     async def execute(self) -> bool:
         """Run subdomain enumeration using subprocess with auto-fallback."""
         try:
-            # Auto-detect: try subfinder first, then amass
             if self.tool == "auto":
                 if check_binary("subfinder"):
                     self.tool = "subfinder"
                 elif check_binary("amass"):
                     self.tool = "amass"
                 else:
-                    self.error = "Neither subfinder nor amass is installed. Install one: go install github.com/projectdiscovery/subfinder or yay -S amass"
+                    self.error = "Neither subfinder nor amass is installed."
                     return False
             elif not check_binary(self.tool):
-                install_cmd = "go install github.com/projectdiscovery/subfinder@latest" if self.tool == "subfinder" else "yay -S amass"
-                self.error = f"{self.tool} is not installed. Install with: {install_cmd}"
+                self.error = f"{self.tool} is not installed."
                 return False
-            
+
             cmd = self.get_command()
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            if result.stdout:
-                self.output = result.stdout
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                self.error = "Subdomain enumeration timed out after 300 seconds"
+                return False
+
+            if stdout:
+                self.output = stdout.decode()
                 self.findings = self.parse_output()
                 return True
             else:
-                self.error = result.stderr if result.stderr else "No output"
+                self.error = stderr.decode() if stderr else "No output"
                 return False
 
-        except subprocess.TimeoutExpired:
-            self.error = "Subdomain enumeration timed out after 300 seconds"
-            return False
         except Exception as e:
             self.error = str(e)
             return False
@@ -152,144 +153,170 @@ class SubdomainAgent(BaseAgent):
 
 
 class PortScanAgent(BaseAgent):
-    """Port scanning agent using nmap."""
+    """Port scanning agent using nmap with batching and timeout support."""
 
     agent_type = AgentType.PORT_SCAN
 
-    def get_command(self) -> list:
-        """Get nmap command as list for subprocess."""
-        ports = self.config.get("ports", "1-100")  # Default to top 100 ports for speed
-        return ["nmap", "-sV", "-oX", "-", "-p", ports, self.target]
+    def __init__(self, targets: list[str] | str, config: Optional[dict] = None):
+        """Initialize with a list of targets or a single target string."""
+        if isinstance(targets, str):
+            self.targets = [targets]
+        else:
+            self.targets = targets
+        
+        # Initialize BaseAgent with the first target as a representative
+        rep_target = self.targets[0] if self.targets else "multiple-targets"
+        super().__init__(rep_target, config)
+        self.results: list[dict[str, Any]] = []
 
-    async def execute(self) -> bool:
-        """Run port scan using subprocess."""
+    def get_command(self, targets: list[str]) -> list[str]:
+        """Get nmap command as list for subprocess."""
+        # Use specific ports requested: 80,443,8080,8443,8888,3000,5000,9090
+        ports = self.config.get("ports", "80,443,8080,8443,8888,3000,5000,9090")
+        return ["nmap", "-sV", "-sC", "-T4", "--open", "-oX", "-", "-p", ports] + targets
+
+    async def execute(self) -> list[dict[str, Any]]:
+        """
+        Run port scan on targets in batches of 5.
+        Returns a list of dicts: [{host, port, service, version}]
+        """
+        if not self.targets:
+            return []
+
+        if not check_binary("nmap"):
+            self.error = "nmap is not installed. Run: sudo pacman -S nmap"
+            return []
+
+        self.results = []
+        self.findings = []
+        
+        # Chunk targets into batches of 5
+        for i in range(0, len(self.targets), 5):
+            batch = self.targets[i:i + 5]
+            batch_results = await self._scan_batch(batch)
+            self.results.extend(batch_results)
+            
+            # Map results to Finding objects for HiveRecon database compatibility
+            for res in batch_results:
+                finding = Finding(
+                    agent_type=self.agent_type,
+                    finding_type="open_port",
+                    severity=self._get_severity(res["port"]),
+                    title=f"Open port {res['port']} on {res['host']}",
+                    description=f"Service: {res['service']}, Version: {res['version']}",
+                    evidence=res,
+                    location=f"{res['host']}:{res['port']}",
+                )
+                self.findings.append(finding)
+
+        return self.results
+
+    async def _scan_batch(self, batch: list[str]) -> list[dict[str, Any]]:
+        """Run nmap on a batch of targets with a per-host timeout (120s per host)."""
+        # 120s timeout per host in the batch
+        timeout = 120 * len(batch)
+        cmd = self.get_command(batch)
+
         try:
-            if not check_binary("nmap"):
-                self.error = "nmap is not installed. Run: sudo pacman -S nmap"
-                return False
-            cmd = self.get_command()
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            if result.stdout:
-                self.output = result.stdout
-                self.findings = self.parse_output()
-                return True
-            else:
-                self.error = result.stderr if result.stderr else "No output"
-                return False
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                if proc.returncode is None:
+                    try:
+                        proc.kill()
+                        await proc.wait()
+                    except ProcessLookupError:
+                        pass
+                self.error = f"Nmap scan timed out for batch: {', '.join(batch)}"
+                return []
 
-        except subprocess.TimeoutExpired:
-            self.error = "Nmap scan timed out after 300 seconds"
-            return False
+            if stdout:
+                return self._parse_nmap_xml(stdout.decode())
+            else:
+                if stderr:
+                    self.error = stderr.decode()
+                return []
         except Exception as e:
             self.error = str(e)
-            return False
+            return []
+
+    def _parse_nmap_xml(self, xml_data: str) -> list[dict[str, Any]]:
+        """Parse nmap XML output to extract host, port, service, version, state."""
+        batch_findings = []
+        if not xml_data.strip():
+            return batch_findings
+            
+        try:
+            root = ET.fromstring(xml_data)
+            for host in root.findall(".//host"):
+                # Extract host (prefer hostname, fallback to IP)
+                host_val = "unknown"
+                addr_node = host.find("address")
+                if addr_node is not None:
+                    host_val = addr_node.get("addr", "unknown")
+                
+                # Check for hostnames in the XML
+                hostname_node = host.find(".//hostname")
+                if hostname_node is not None:
+                    name = hostname_node.get("name")
+                    if name:
+                        host_val = name
+
+                ports = host.find("ports")
+                if ports is not None:
+                    for port in ports.findall("port"):
+                        # Extract state and ensure it's open
+                        state_node = port.find("state")
+                        state = state_node.get("state") if state_node is not None else "unknown"
+                        
+                        if state == "open":
+                            port_id = port.get("portid")
+                            
+                            service_node = port.find("service")
+                            service_name = "unknown"
+                            version_info = ""
+                            
+                            if service_node is not None:
+                                service_name = service_node.get("name", "unknown")
+                                product = service_node.get("product", "")
+                                version = service_node.get("version", "")
+                                if product:
+                                    version_info = f"{product} {version}".strip()
+                                else:
+                                    version_info = version
+
+                            batch_findings.append({
+                                "host": host_val,
+                                "port": port_id,
+                                "service": service_name,
+                                "version": version_info
+                            })
+        except Exception:
+            # Silently handle parsing errors for robustness
+            pass
+        return batch_findings
+
+    def _get_severity(self, port: str) -> FindingSeverity:
+        """Assign severity levels to specific common ports."""
+        try:
+            p = int(port)
+            if p in [21, 22, 23, 3389]:
+                return FindingSeverity.LOW
+            if p in [1433, 3306, 5432, 27017]:
+                return FindingSeverity.MEDIUM
+        except ValueError:
+            pass
+        return FindingSeverity.INFO
 
     def parse_output(self) -> list[Finding]:
-        """Parse nmap XML output into findings."""
-        findings = []
-
-        if not self.output:
-            return findings
-
-        try:
-            root = ET.fromstring(self.output)
-            
-            for host in root.findall(".//host"):
-                # Get host address
-                addr_elem = host.find("address")
-                if addr_elem is not None:
-                    ip_addr = addr_elem.get("addr", "unknown")
-                else:
-                    ip_addr = "unknown"
-
-                # Get ports
-                ports_elem = host.find("ports")
-                if ports_elem is not None:
-                    for port_elem in ports_elem.findall("port"):
-                        port_id = port_elem.get("portid", "unknown")
-                        protocol = port_elem.get("protocol", "tcp")
-                        
-                        state_elem = port_elem.find("state")
-                        if state_elem is not None and state_elem.get("state") == "open":
-                            service_elem = port_elem.find("service")
-                            service_name = "unknown"
-                            service_product = ""
-                            service_version = ""
-                            
-                            if service_elem is not None:
-                                service_name = service_elem.get("name", "unknown")
-                                service_product = service_elem.get("product", "")
-                                service_version = service_elem.get("version", "")
-                            
-                            service_info = service_name
-                            if service_product:
-                                service_info = f"{service_product} {service_version}".strip()
-                            
-                            # Determine severity based on port
-                            severity = FindingSeverity.INFO
-                            if port_id in ["21", "22", "23", "3389"]:
-                                severity = FindingSeverity.LOW
-                            elif port_id in ["1433", "3306", "5432", "27017"]:
-                                severity = FindingSeverity.MEDIUM
-
-                            finding = Finding(
-                                agent_type=self.agent_type,
-                                finding_type="open_port",
-                                severity=severity,
-                                title=f"Open port {port_id}/{protocol} detected",
-                                description=f"Service: {service_info}",
-                                evidence={
-                                    "ip": ip_addr,
-                                    "port": port_id,
-                                    "protocol": protocol,
-                                    "service": service_name,
-                                    "product": service_product,
-                                    "version": service_version,
-                                },
-                                location=f"{ip_addr}:{port_id}",
-                            )
-                            findings.append(finding)
-        except ET.ParseError as e:
-            # Fallback to simple text parsing if XML parsing fails
-            findings.extend(self._parse_text_output())
-        except Exception as e:
-            self.error = f"Error parsing nmap output: {str(e)}"
-
-        return findings
-
-    def _parse_text_output(self) -> list[Finding]:
-        """Fallback text-based parsing for nmap output."""
-        findings = []
-        for line in self.output.split("\n"):
-            if "/tcp" in line and "open" in line:
-                parts = line.split()
-                if parts:
-                    port = parts[0].split("/")[0]
-                    service = " ".join(parts[2:]) if len(parts) > 2 else "unknown"
-
-                    severity = FindingSeverity.INFO
-                    if port in ["21", "22", "23", "3389"]:
-                        severity = FindingSeverity.LOW
-                    elif port in ["1433", "3306", "5432", "27017"]:
-                        severity = FindingSeverity.MEDIUM
-
-                    finding = Finding(
-                        agent_type=self.agent_type,
-                        finding_type="open_port",
-                        severity=severity,
-                        title=f"Open port {port} detected",
-                        description=f"Service: {service}",
-                        evidence={"port": port, "service": service, "raw": line},
-                        location=f"{self.target}:{port}",
-                    )
-                    findings.append(finding)
-        return findings
+        """Required for BaseAgent compatibility. Returns findings from last execute."""
+        return self.findings
 
 
 class EndpointDiscoveryAgent(BaseAgent):
@@ -297,73 +324,100 @@ class EndpointDiscoveryAgent(BaseAgent):
 
     agent_type = AgentType.ENDPOINT
 
-    def __init__(self, target: str, config: Optional[dict] = None):
-        super().__init__(target, config)
+    def __init__(self, targets: list[str] | list[dict[str, Any]] | str, config: Optional[dict] = None):
+        """
+        Initialize with targets. 
+        Can be a list of host strings, list of dicts (from PortScanAgent), or single host string.
+        """
+        if isinstance(targets, str):
+            self.targets = [targets]
+        elif isinstance(targets, list) and targets and isinstance(targets[0], dict):
+            # Extract hosts from port scan results if dicts are provided
+            self.targets = list(dict.fromkeys([t.get("host") for t in targets if t.get("host")]))
+        else:
+            self.targets = targets
+            
+        rep_target = self.targets[0] if self.targets else "multiple-targets"
+        super().__init__(rep_target, config)
         self.tool = self.config.get("tool", "auto")  # auto, katana, or ffuf
         self.wordlist = self.config.get("wordlist", "/usr/share/wordlists/dirb/common.txt")
+        self.all_urls: list[str] = []
 
-    def get_command(self) -> list:
-        """Get endpoint discovery command as list for subprocess."""
+    def get_command(self, target: str) -> list:
+        """Get endpoint discovery command for a specific target."""
         if self.tool == "ffuf":
-            return ["ffuf", "-u", f"https://{self.target}/FUZZ",
+            return ["ffuf", "-u", f"https://{target}/FUZZ",
                     "-w", self.wordlist, "-o", "stdout", "-of", "json"]
-        return ["katana", "-u", f"https://{self.target}", "-jc", "-silent", "-json"]
+        return ["katana", "-u", f"https://{target}", "-jc", "-silent", "-json"]
 
-    async def execute(self) -> bool:
-        """Run endpoint discovery using subprocess with auto-detection."""
+    async def execute(self) -> list[str]:
+        """Run endpoint discovery on all targets. Returns list of discovered URLs."""
+        if not self.targets:
+            return []
+            
         try:
-            # Auto-detect: try katana first, then ffuf
+            # Auto-detect tools
             if self.tool == "auto":
                 if check_binary("katana"):
                     self.tool = "katana"
                 elif check_binary("ffuf"):
                     self.tool = "ffuf"
                 else:
-                    self.error = "Neither katana nor ffuf is installed. Install: go install github.com/projectdiscovery/katana or yay -S ffuf"
-                    return False
+                    self.error = "Neither katana nor ffuf is installed."
+                    return []
             elif not check_binary(self.tool):
-                install_cmd = "go install github.com/projectdiscovery/katana@latest" if self.tool == "katana" else "yay -S ffuf"
-                self.error = f"{self.tool} is not installed. Install with: {install_cmd}"
-                return False
+                self.error = f"{self.tool} is not installed."
+                return []
+
+            self.all_urls = []
+            self.findings = []
             
-            # Validate wordlist for ffuf
-            if self.tool == "ffuf" and not os.path.exists(self.wordlist):
-                self.error = f"Wordlist not found: {self.wordlist}"
-                return False
+            # Process targets sequentially or in small batches
+            for target in self.targets:
+                proc = await asyncio.create_subprocess_exec(
+                    *self.get_command(target),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+                    if stdout:
+                        output = stdout.decode()
+                        target_findings = self._parse_target_output(output)
+                        self.findings.extend(target_findings)
+                        for f in target_findings:
+                            if f.finding_type == "endpoint" and f.location:
+                                self.all_urls.append(f.location)
+                except asyncio.TimeoutError:
+                    if proc.returncode is None:
+                        try:
+                            proc.kill()
+                            await proc.wait()
+                        except ProcessLookupError:
+                            pass
+                    continue
             
-            result = subprocess.run(
-                self.get_command(),
-                capture_output=True, text=True, timeout=300
-            )
-            if result.stdout:
-                self.output = result.stdout
-                self.findings = self.parse_output()
-                return True
-            else:
-                self.error = result.stderr or "No output"
-                return False
-        except subprocess.TimeoutExpired:
-            self.error = "Endpoint discovery timed out"
-            return False
+            return list(set(self.all_urls))
+
         except Exception as e:
             self.error = str(e)
-            return False
+            return []
     
-    def parse_output(self) -> list[Finding]:
-        """Parse endpoint discovery results."""
+    def _parse_target_output(self, output: str) -> list[Finding]:
+        """Parse tool output for a single target."""
         findings = []
-        
-        if not self.output:
+        if not output:
             return findings
         
         if self.tool == "katana":
-            for line in self.output.strip().split("\n"):
+            for line in output.strip().split("\n"):
                 if line:
                     try:
                         data = json.loads(line)
                         url = data.get("endpoint", data.get("request", {}).get("url", ""))
                         if url:
-                            finding = Finding(
+                            findings.append(Finding(
                                 agent_type=self.agent_type,
                                 finding_type="endpoint",
                                 severity=FindingSeverity.INFO,
@@ -371,19 +425,17 @@ class EndpointDiscoveryAgent(BaseAgent):
                                 description=f"Discovered endpoint during crawling",
                                 evidence=data,
                                 location=url,
-                            )
-                            findings.append(finding)
+                            ))
                     except json.JSONDecodeError:
                         continue
         else:
-            # ffuf JSON output
             try:
-                data = json.loads(self.output)
+                data = json.loads(output)
                 for result in data.get("results", []):
                     url = result.get("url", "")
                     status = result.get("status", 0)
                     if url and status:
-                        finding = Finding(
+                        findings.append(Finding(
                             agent_type=self.agent_type,
                             finding_type="endpoint",
                             severity=FindingSeverity.INFO,
@@ -391,12 +443,13 @@ class EndpointDiscoveryAgent(BaseAgent):
                             description=f"Discovered endpoint with status {status}",
                             evidence=result,
                             location=url,
-                        )
-                        findings.append(finding)
+                        ))
             except json.JSONDecodeError:
                 pass
-        
         return findings
+
+    def parse_output(self) -> list[Finding]:
+        return self.findings
 
 
 class VulnerabilityScanAgent(BaseAgent):
@@ -404,9 +457,24 @@ class VulnerabilityScanAgent(BaseAgent):
 
     agent_type = AgentType.VULNERABILITY
 
+    def __init__(self, targets: list[str] | str, config: Optional[dict] = None):
+        """Initialize with a list of URLs or a single URL string."""
+        if isinstance(targets, str):
+            self.targets = [targets]
+        else:
+            self.targets = targets
+            
+        rep_target = self.targets[0] if self.targets else "multiple-urls"
+        super().__init__(rep_target, config)
+
     def get_command(self) -> list:
         """Get nuclei command as list for subprocess."""
-        cmd = ["nuclei", "-u", f"https://{self.target}", "-json"]
+        cmd = ["nuclei", "-json", "-silent"]
+        
+        # Add targets
+        for t in self.targets:
+            cmd.extend(["-u", t])
+            
         templates = self.config.get("templates", "")
         severity_filter = self.config.get("severity_filter", "")
         if templates:
@@ -416,25 +484,44 @@ class VulnerabilityScanAgent(BaseAgent):
         return cmd
 
     async def execute(self) -> bool:
-        """Run vulnerability scan using subprocess."""
+        """Run vulnerability scan on all targets."""
+        if not self.targets:
+            return True
+            
         try:
             if not check_binary("nuclei"):
-                self.error = "nuclei is not installed. Install with: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"
+                self.error = "nuclei is not installed."
                 return False
-            result = subprocess.run(
-                self.get_command(),
-                capture_output=True, text=True, timeout=300
+                
+            proc = await asyncio.create_subprocess_exec(
+                *self.get_command(),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            if result.stdout:
-                self.output = result.stdout
+
+            try:
+                # Nuclei can take a while for many targets
+                timeout = max(300, 60 * len(self.targets))
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                if proc.returncode is None:
+                    try:
+                        proc.kill()
+                        await proc.wait()
+                    except ProcessLookupError:
+                        pass
+                self.error = "Vulnerability scan timed out"
+                return False
+
+            if stdout:
+                self.output = stdout.decode()
                 self.findings = self.parse_output()
                 return True
             else:
-                self.error = result.stderr or "No output"
+                if stderr:
+                    self.error = stderr.decode()
                 return False
-        except subprocess.TimeoutExpired:
-            self.error = "Vulnerability scan timed out"
-            return False
+
         except Exception as e:
             self.error = str(e)
             return False
@@ -442,7 +529,6 @@ class VulnerabilityScanAgent(BaseAgent):
     def parse_output(self) -> list[Finding]:
         """Parse nuclei vulnerability scan results."""
         findings = []
-        
         if not self.output:
             return findings
         
@@ -463,7 +549,7 @@ class VulnerabilityScanAgent(BaseAgent):
                         FindingSeverity.INFO
                     )
                     
-                    finding = Finding(
+                    findings.append(Finding(
                         agent_type=self.agent_type,
                         finding_type="vulnerability",
                         severity=severity,
@@ -471,11 +557,9 @@ class VulnerabilityScanAgent(BaseAgent):
                         description=data.get("info", {}).get("description", ""),
                         evidence=data,
                         location=data.get("host", "") + data.get("matched-at", ""),
-                    )
-                    findings.append(finding)
+                    ))
                 except json.JSONDecodeError:
                     continue
-        
         return findings
 
 
@@ -493,28 +577,28 @@ class MCPServerAgent(BaseAgent):
             if not check_binary("curl"):
                 self.error = "curl is not installed."
                 return False
-            
+
             # Try HTTPS first, then fall back to HTTP
             self.output = ""
             for scheme in ["https", "http"]:
                 try:
-                    result = subprocess.run(
-                        self.get_command(scheme),
-                        capture_output=True, text=True, timeout=30
+                    proc = await asyncio.create_subprocess_exec(
+                        *self.get_command(scheme),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
                     )
-                    if result.stdout and "HTTP/" in result.stdout:
-                        self.output = result.stdout
+
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+                    if stdout and b"HTTP/" in stdout:
+                        self.output = stdout.decode()
                         self.findings = self.parse_output()
                         return True
-                except subprocess.TimeoutExpired:
+                except asyncio.TimeoutError:
                     continue
-            
+
             self.error = "Both HTTPS and HTTP connection attempts timed out"
             return False
-            
-        except subprocess.TimeoutExpired:
-            self.error = "HTTP header check timed out"
-            return False
+
         except Exception as e:
             self.error = str(e)
             return False

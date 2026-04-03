@@ -2,15 +2,15 @@ services:
   app:
     build:
       context: .
-    depends_on:
-      - ollama
     environment:
-      OLLAMA_BASE_URL: http://ollama:11434
+      GROQ_API_KEY: ${GROQ_API_KEY}
       DATABASE_URL: sqlite+aiosqlite:///./hiverecon.db
     ports:
       - "8000:8000"
     volumes:
       - ./reports:/app/reports
+    networks:
+      - hiverecon-net
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 30s
@@ -18,12 +18,5 @@ services:
       retries: 5
       start_period: 20s
 
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
-volumes:
-  ollama_data:
+networks:
+  hiverecon-net:

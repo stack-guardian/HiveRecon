@@ -1,0 +1,14 @@
+[Unit]
+Description=HiveRecon API Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/hiverecon
+ExecStart=%h/hiverecon/venv/bin/uvicorn hiverecon.api.server:app --host 0.0.0.0 --port 8000 --log-level warning
+Restart=on-failure
+RestartSec=5
+Environment=PATH=%h/hiverecon/venv/bin
+
+[Install]
+WantedBy=default.target

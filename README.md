@@ -34,6 +34,23 @@ HiveRecon automates the complete security reconnaissance pipeline -- from subdom
 - **MCP Server** -- Model Context Protocol interface for external AI agent integration
 - **Single-Container Deployment** -- Everything runs in one Docker container on port 8000
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/01_hiverecon_landing.png" alt="Welcome Screen" width="90%">
+  <br><em>Welcome Screen</em>
+</p>
+
+<p align="center">
+  <img src="docs/images/02_hiverecon_legal_disclaimer.png" alt="Legal Disclaimer" width="90%">
+  <br><em>Legal Disclaimer — Authorization Acknowledgment</em>
+</p>
+
+<p align="center">
+  <img src="docs/images/03_hiverecon_scope_config.png" alt="Scope Configuration" width="90%">
+  <br><em>Scope Configuration — Define In/Out of Scope Targets</em>
+</p>
+
 ## Tech Stack
 
 | Component | Technology |

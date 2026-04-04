@@ -171,9 +171,10 @@ class PortScanAgent(BaseAgent):
 
     def get_command(self, targets: list[str]) -> list[str]:
         """Get nmap command as list for subprocess."""
+        # -Pn: skip host discovery (external hosts often block ICMP pings)
         # Use specific ports requested: 80,443,8080,8443,8888,3000,5000,9090
         ports = self.config.get("ports", "80,443,8080,8443,8888,3000,5000,9090")
-        return ["nmap", "-sV", "-sC", "-T4", "--open", "-oX", "-", "-p", ports] + targets
+        return ["nmap", "-Pn", "-sV", "-sC", "-T4", "--open", "-oX", "-", "-p", ports] + targets
 
     async def execute(self) -> list[dict[str, Any]]:
         """

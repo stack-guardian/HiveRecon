@@ -133,10 +133,12 @@ async def run_scan_background(
             )
 
             coordinator = HiveMindCoordinator(config=config, session=session)
+            # Skip scope validation for standalone scans (no bug bounty platform)
+            effective_scope = scope_config if platform else None
             findings, summary = await coordinator.run_scan(
                 target=target,
                 scan_id=scan_id,
-                scope_config=scope_config or {},
+                scope_config=effective_scope,
             )
 
             for finding in findings:

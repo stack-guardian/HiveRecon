@@ -348,7 +348,8 @@ class EndpointDiscoveryAgent(BaseAgent):
         if self.tool == "ffuf":
             return ["ffuf", "-u", f"https://{target}/FUZZ",
                     "-w", self.wordlist, "-o", "stdout", "-of", "json"]
-        return ["katana", "-u", f"https://{target}", "-jc", "-silent", "-json"]
+        # katana v2+ does not support -json; output is plain-text URLs
+        return ["katana", "-u", f"https://{target}", "-jc", "-silent"]
 
     async def execute(self) -> list[str]:
         """Run endpoint discovery on all targets. Returns list of discovered URLs."""
@@ -409,25 +410,37 @@ class EndpointDiscoveryAgent(BaseAgent):
         findings = []
         if not output:
             return findings
-        
+
         if self.tool == "katana":
             for line in output.strip().split("\n"):
-                if line:
-                    try:
-                        data = json.loads(line)
-                        url = data.get("endpoint", data.get("request", {}).get("url", ""))
-                        if url:
-                            findings.append(Finding(
-                                agent_type=self.agent_type,
-                                finding_type="endpoint",
-                                severity=FindingSeverity.INFO,
-                                title=f"Endpoint discovered",
-                                description=f"Discovered endpoint during crawling",
-                                evidence=data,
-                                location=url,
-                            ))
-                    except json.JSONDecodeError:
-                        continue
+                if not line:
+                    continue
+                try:
+                    # Try JSON parsing first (legacy katana)
+                    data = json.loads(line)
+                    url = data.get("endpoint", data.get("request", {}).get("url", ""))
+                    if url:
+                        findings.append(Finding(
+                            agent_type=self.agent_type,
+                            finding_type="endpoint",
+                            severity=FindingSeverity.INFO,
+                            title=f"Endpoint discovered",
+                            description=f"Discovered endpoint during crawling",
+                            evidence=data,
+                            location=url,
+                        ))
+                except json.JSONDecodeError:
+                    # Newer katana outputs plain URLs, one per line
+                    url = line.strip()
+                    if url and (url.startswith("http://") or url.startswith("https://")):
+                        findings.append(Finding(
+                            agent_type=self.agent_type,
+                            finding_type="endpoint",
+                            severity=FindingSeverity.INFO,
+                            title=f"Endpoint discovered",
+                            description=f"Discovered endpoint during crawling",
+                            location=url,
+                        ))
         else:
             try:
                 data = json.loads(output)

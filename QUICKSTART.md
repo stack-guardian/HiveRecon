@@ -1,15 +1,15 @@
-# 🐝 HiveRecon - Quick Start Guide (Arch Linux)
+# HiveRecon - Quick Start Guide (Arch Linux)
 
-## ✅ Installation Complete!
+## Installation Complete!
 
 Your HiveRecon setup is complete and working!
 
 ## Current Status
 
-- ✅ Python dependencies installed
-- ✅ Database initialized
-- ✅ Groq API configured (llama-3.1-8b-instant)
-- ✅ API server running on http://localhost:8080
+- Python dependencies installed
+- Database initialized
+- Groq API configured (llama-3.1-8b-instant)
+- API server running on http://localhost:8080
 
 ## Quick Commands
 
@@ -140,11 +140,11 @@ python -c "from hiverecon.database import init_db; from hiverecon.config import 
 3. **Test with a real scan** (with authorization!)
 4. **Customize config** in `config/config.yaml`
 
-## ⚠️ Legal Reminder
+## Legal Reminder
 
 Always obtain **explicit written authorization** before scanning any target.
 Unauthorized scanning is illegal!
 
 ---
 
-**Happy (legal) hunting! 🐝**
+**Happy (legal) hunting!**

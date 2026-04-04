@@ -157,23 +157,23 @@ hiverecon/
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| AI Coordination | ✅ | LangChain + Groq |
-| Subdomain Enumeration | ✅ | subfinder, amass parsers |
-| Port Scanning | ✅ | nmap parser |
-| Endpoint Discovery | ✅ | katana, ffuf parsers |
-| Vulnerability Scanning | ✅ | nuclei parser |
-| MCP Analysis | 🚧 | Placeholder implemented |
-| False Positive Detection | ✅ | Heuristics + AI |
-| Findings Correlation | ✅ | Cross-tool grouping |
-| Audit Logging | ✅ | Full compliance |
-| Rate Limiting | ✅ | Token bucket algorithm |
-| CLI Interface | ✅ | Full featured |
-| Web Dashboard | ✅ | React + Bootstrap |
-| Docker Support | ✅ | Multi-stage build |
-| Platform APIs | ✅ | H1, Bugcrowd, Intigriti |
-| Report Generation | 🚧 | Basic structure ready |
+| AI Coordination | Yes | LangChain + Groq |
+| Subdomain Enumeration | Yes | subfinder, amass parsers |
+| Port Scanning | Yes | nmap parser |
+| Endpoint Discovery | Yes | katana, ffuf parsers |
+| Vulnerability Scanning | Yes | nuclei parser |
+| MCP Analysis | Partial | Placeholder implemented |
+| False Positive Detection | Yes | Heuristics + AI |
+| Findings Correlation | Yes | Cross-tool grouping |
+| Audit Logging | Yes | Full compliance |
+| Rate Limiting | Yes | Token bucket algorithm |
+| CLI Interface | Yes | Full featured |
+| Web Dashboard | Yes | React + Bootstrap |
+| Docker Support | Yes | Multi-stage build |
+| Platform APIs | Yes | H1, Bugcrowd, Intigriti |
+| Report Generation | Partial | Basic structure ready |
 
-## 💡 Architecture Highlights
+## Architecture Highlights
 
 ### Challenges Addressed
 
@@ -191,16 +191,16 @@ hiverecon/
 - **React Bootstrap**: Quick, responsive, familiar UI
 - **Docker**: Reproducible, all tools bundled
 
-## 🔐 Legal & Ethics
+## Legal and Ethics
 
-- ✅ Mandatory disclaimer acknowledgment
-- ✅ Scope validation before scanning
-- ✅ Complete audit trail
-- ✅ Rate limiting to prevent abuse
-- ✅ Clear terms of use
+- Mandatory disclaimer acknowledgment
+- Scope validation before scanning
+- Complete audit trail
+- Rate limiting to prevent abuse
+- Clear terms of use
 
 ---
 
-**Built with ❤️ for the bug bounty community**
+**Built for the bug bounty community**
 
 *Remember: Always scan responsibly and with authorization!*

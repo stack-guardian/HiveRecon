@@ -2,7 +2,8 @@ FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    HOME=/root
 
 WORKDIR /app
 
@@ -58,6 +59,10 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 
 COPY . .
 
+RUN mkdir -p /root/.config/subfinder && \
+    touch /root/.config/subfinder/config.yaml && \
+    chmod 644 /root/.config/subfinder/config.yaml
+
 RUN pip install --no-cache-dir . \
     && mkdir -p /app/reports /app/data/logs /app/data/audit \
     && adduser --system --no-create-home hiverecon \
@@ -67,4 +72,4 @@ USER hiverecon
 
 EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "hiverecon.api.server:app", "--host", "0.0.0.0", "--port", "8000"]

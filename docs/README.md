@@ -20,7 +20,7 @@ HiveRecon is an AI-powered reconnaissance framework designed for bug bounty hunt
 
 ### Key Features
 
-- **AI Coordination**: LangChain-based orchestration with Ollama (Qwen 2.5, Llama 3)
+- **AI Coordination**: LangChain-based orchestration with Groq (Llama 3, Mixtral)
 - **Parallel Recon Agents**: Subdomain enumeration, port scanning, endpoint discovery, vulnerability scanning
 - **Legal-First Design**: Mandatory scope validation, audit logging, boundary enforcement
 - **Intelligent Correlation**: Cross-tool findings prioritization & false positive reduction
@@ -30,7 +30,7 @@ HiveRecon is an AI-powered reconnaissance framework designed for bug bounty hunt
 ### Prerequisites
 
 - Python 3.10+
-- Ollama (for local AI)
+- Groq API key (free at https://console.groq.com)
 - Docker (optional, for containerized deployment)
 - Recon tools: subfinder, amass, nmap, katana, ffuf, nuclei
 
@@ -63,9 +63,8 @@ docker-compose up -d
    # Install Python dependencies
    pip install -r requirements.txt
    
-   # Install Ollama
-   curl -fsSL https://ollama.com/install.sh | sh
-   ollama pull qwen2.5:7b
+   # Set Groq API key
+   export GROQ_API_KEY=gsk_your_key_here
    
    # Install recon tools (requires Go)
    go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
@@ -90,9 +89,8 @@ Edit `config/config.yaml` to customize HiveRecon:
 ```yaml
 # AI Settings
 ai:
-  provider: ollama
-  model: qwen2.5:7b
-  base_url: http://localhost:11434
+  provider: groq
+  model: llama-3.1-8b-instant
   temperature: 0.3
 
 # Scan Settings
@@ -109,8 +107,8 @@ scan:
 Create `config/.env` based on `config/.env.example`:
 
 ```bash
-OLLAMA_BASE_URL=http://localhost:11434
-AI_MODEL=qwen2.5:7b
+GROQ_API_KEY=gsk_your_key_here
+AI_MODEL=llama-3.1-8b-instant
 DATABASE_URL=sqlite+aiosqlite:///data/hiverecon.db
 API_HOST=0.0.0.0
 API_PORT=8080
@@ -197,7 +195,7 @@ Features:
 ├─────────────────────────────────────────────────────────┤
 │  CLI/API  │  Config  │  Audit Logger  │  Scope Validator│
 ├─────────────────────────────────────────────────────────┤
-│              Hive Mind AI (LangChain + Ollama)          │
+│              Hive Mind AI (LangChain + Groq)            │
 ├─────────────────────────────────────────────────────────┤
 │   Subdomain  │  Port   │  Endpoint  │  Vulnerability   │
 │    Agent     │  Agent  │   Agent    │     Agent        │
@@ -256,17 +254,15 @@ http://localhost:8080
 
 ## Troubleshooting
 
-### Ollama Connection Error
+### Groq API Key Not Set
 
-**Problem**: Cannot connect to Ollama
+**Problem**: AI features return errors due to missing API key
 
 **Solution**:
 ```bash
-# Check if Ollama is running
-ollama serve
-
-# Verify model is pulled
-ollama pull qwen2.5:7b
+# Set your Groq API key
+export GROQ_API_KEY=gsk_your_key_here
+# Or add to config/.env
 ```
 
 ### Tool Not Found

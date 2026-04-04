@@ -64,29 +64,23 @@ export default function Findings() {
             <Table>
               <TableHeader>
                 <TableRow className="border-zinc-800 hover:bg-transparent">
-                  <TableHead className="text-zinc-400">Target</TableHead>
+                  <TableHead className="text-zinc-400">Location</TableHead>
                   <TableHead className="text-zinc-400">Type</TableHead>
                   <TableHead className="text-zinc-400">Severity</TableHead>
-                  <TableHead className="text-zinc-400">Tool</TableHead>
-                  <TableHead className="text-zinc-400">Status</TableHead>
+                  <TableHead className="text-zinc-400">Title</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((f) => (
                   <TableRow key={f.id} className="border-zinc-800 hover:bg-zinc-800/50">
-                    <TableCell className="font-mono text-sm text-zinc-200">{f.target}</TableCell>
-                    <TableCell className="text-zinc-300">{f.type}</TableCell>
+                    <TableCell className="font-mono text-sm text-zinc-200">{f.location || 'N/A'}</TableCell>
+                    <TableCell className="text-zinc-300">{f.finding_type}</TableCell>
                     <TableCell>
                       <Badge className={`border text-xs ${severityColor[f.severity] ?? severityColor.info}`}>
                         {f.severity}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-zinc-400">{f.tool}</TableCell>
-                    <TableCell>
-                      <Badge className="bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs">
-                        {f.status}
-                      </Badge>
-                    </TableCell>
+                    <TableCell className="text-zinc-300 text-sm">{f.title}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

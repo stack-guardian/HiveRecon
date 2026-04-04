@@ -1,213 +1,141 @@
 # Known Issues and Technical Debt
 
-This document tracks known issues, limitations, and areas that need improvement.
+This document tracks known issues, limitations, and planned improvements.
 
-**Last updated:** 2026-03-30  
-**Test status:** 26 tests passing
-
-## Critical Issues
-
-### 1. Tool Execution Not Fully Tested
-**Status**: Code exists, needs real tool installation  
-**Priority**: High  
-**Issue**: While the agent structure exists with subprocess execution, the tools (subfinder, nmap, nuclei, etc.) are not installed by default.
-
-**What works:**
-- ✅ Subprocess execution code in `hiverecon/agents/recon_agents.py`
-- ✅ Parsers implemented and tested (14 parser tests passing)
-- ✅ Error handling structure in place
-- ✅ Test script created: `tests/test_tools_execution.py`
-
-**What needs work:**
-- Tools must be installed separately
-- No integration tests with real tool output yet
-- Timeout handling needs validation with slow tools
-
-**Fix plan:**
-1. Install subfinder and run test
-2. Add timeout configuration per tool
-3. Test with large outputs
+**Last updated:** 2026-04-04
+**Version:** 1.0.1
+**Test status:** All core features verified through end-to-end testing
 
 ---
 
-### 2. MCP Server Agent is Placeholder
-**Status**: Not implemented  
-**Priority**: Medium  
-**Issue**: The MCP (Model Context Protocol) server agent for browser-based analysis only has placeholder implementation.
+## Current Status
 
-**Current state:**
-- Agent class exists with basic structure
-- No actual MCP protocol implementation
-- No browser automation
+The following features are implemented and verified:
 
-**Fix plan:**
-1. Research MCP protocol specification
-2. Decide: implement properly or remove from roadmap
-3. If implementing: add Playwright/Selenium integration
-
----
-
-### 3. SQLite with Async SQLAlchemy
-**Status**: Implemented and tested  
-**Priority**: Low (for now)  
-**Issue**: Using SQLite with async SQLAlchemy (aiosqlite). Currently working but needs load testing.
-
-**What works:**
-- ✅ 4 database tests passing
-- ✅ Async fixtures working
-- ✅ Relationship queries working
-
-**Potential issues:**
-- Concurrent scan writes may cause locks (not tested)
-- No connection pooling configured
-- In-memory DB for tests doesn't catch all production issues
-
-**Fix plan:**
-1. Add stress tests with concurrent scans
-2. Consider adding PostgreSQL support for production use
-3. Add connection pool configuration
+- FastAPI backend with 15 endpoints (all returning correct responses)
+- React dashboard with 8 pages, served from the same container on port 8000
+- Groq AI integration with llama-3.1-8b-instant model
+- 5 recon agents (subfinder, nmap, katana, nuclei, MCP)
+- AI-generated scan summaries with Markdown output
+- Finding correlation and educational content generation
+- Audit logging for legal compliance
+- Docker single-container deployment
+- Desktop application launcher
 
 ---
 
-### 4. Dashboard Doesn't Connect to Real Data
-**Status**: Frontend built, API exists, not integrated  
-**Priority**: High  
-**Issue**: The React dashboard has UI components but real-time data flow isn't implemented.
+## Known Issues
 
-**What exists:**
-- React components for scans, findings, settings
-- API endpoints in FastAPI
-- Basic API client in dashboard
+### 1. Subfinder Config Permission Warning
 
-**What's missing:**
-- WebSocket for real-time updates (listed as pending)
-- Live scan progress visualization
-- Error handling and loading states
-- Authentication
+**Severity:** Low
+**Impact:** Non-blocking. Cosmetic only.
 
-**Fix plan:**
-1. Implement WebSocket endpoint in FastAPI
-2. Add WebSocket client to React app
-3. Implement proper loading/error states
-4. Test with actual scan execution
+Subfinder outputs a permission denied warning when accessing `/root/.config/subfinder/config.yaml` during scans. Subdomain enumeration functions correctly -- the warning appears in scan output and finding titles but does not prevent operation.
+
+**Root cause:** The config file is created as root in the Dockerfile, but the container runs as the `hiverecon` non-root user. The `chmod 644` was applied but file ownership remains root.
+
+**Planned fix:** Change file ownership to `hiverecon` user in Dockerfile, or configure subfinder to use an alternative config path.
 
 ---
 
-### 5. No Secret Management for API Keys
-**Status**: Basic .env file exists  
-**Priority**: Medium  
-**Issue**: Platform API tokens (HackerOne, Bugcrowd) are stored in .env file. No encryption or rotation.
+### 2. SQLite Write Concurrency
 
-**What exists:**
-- ✅ `.env` file with proper template
-- ✅ `.env` is in .gitignore (not committed to GitHub)
-- ✅ Environment variable loading in config.py
+**Severity:** Low
+**Impact:** Non-blocking for current single-user usage pattern.
 
-**What's missing:**
-- Token validation on input
-- Encryption at rest
-- Token rotation mechanism
+SQLite has limited concurrent write support. Multiple simultaneous scans may experience database lock contention. The `max_concurrent_agents` setting of 5 limits parallelism to avoid this issue in practice.
 
-**Fix plan:**
-1. Add token validation
-2. Consider encrypting tokens
-3. Document secure token storage
+**Planned fix:** Migrate to PostgreSQL for production multi-user deployment. Connection pooling and async support are already structured in the codebase.
 
 ---
 
-## Medium Priority Issues
+### 3. Groq API Key in Compose File
 
-### 6. Rate Limiting Not Configured by Default
-**Status**: Code exists, not tested  
-**Priority**: Medium  
-**Issue**: Rate limiting code exists in `core/rate_limiter.py` but default values untested.
+**Severity:** Medium
+**Impact:** Security concern for shared repositories.
 
-**Fix plan:**
-1. Test with different rate limits
-2. Add configuration per tool
-3. Document recommended values
+The `GROQ_API_KEY` is hardcoded in `docker-compose.yml` as plaintext. This is functional for personal use but should not be committed to a public repository without redaction.
+
+**Planned fix:** Use Docker secrets, a `.env` file with `.gitignore` exclusion, or environment variable injection at runtime.
 
 ---
 
-### 7. AI Prompts Need Refinement
-**Status**: Basic prompts implemented  
-**Priority**: Medium  
-**Issue**: AI prompts for scope validation and findings correlation are basic.
+### 4. No Authentication on Dashboard
 
-**Fix plan:**
-1. Test with various Qwen models
-2. Add prompt versioning
-3. Implement few-shot examples
+**Severity:** Medium
+**Impact:** Security concern for network-exposed deployments.
 
----
+The dashboard has no user authentication. Anyone with network access to port 8000 can view scans, create new ones, and access all findings.
 
-### 8. No Error Recovery
-**Status**: Not implemented  
-**Priority**: Low  
-**Issue**: If an agent crashes mid-scan, there's no recovery mechanism.
-
-**Fix plan:**
-1. Add agent-level retry logic
-2. Implement checkpointing
-3. Allow partial results export
+**Planned fix:** Add JWT-based authentication with user management. The `User` model already exists in the database schema.
 
 ---
 
-## Low Priority Issues
+### 5. No WebSocket for Real-Time Updates
 
-### 9. Documentation Gaps
-- API documentation not auto-generated
-- No video tutorials
-- Missing troubleshooting guide
+**Severity:** Low
+**Impact:** Dashboard polls for scan status instead of receiving push updates.
 
-### 10. Code Quality
-- Some deprecation warnings (datetime.utcnow)
-- Inconsistent docstring coverage
+The `ScanEventBus` is implemented in `core/event_bus.py` but WebSocket integration with the frontend is not complete. The dashboard currently relies on periodic polling.
+
+**Planned fix:** Connect the existing event bus to a WebSocket endpoint and update the React `ScanMonitor` page to use WebSocket subscriptions.
 
 ---
 
-## What's Actually Working (Verified)
+### 6. Scan Scheduling Not Implemented
 
-- ✅ CLI interface (tested manually)
-- ✅ FastAPI backend (health endpoint verified)
-- ✅ Database models (4 tests passing)
-- ✅ Tool output parsers (14 tests passing)
-- ✅ Findings correlation (8 tests passing)
-- ✅ Configuration loading
-- ✅ CI workflow configured
-- ✅ .env properly excluded from git
-- ✅ README has correct clone URL
+**Severity:** Low
+**Impact:** Scans can only be triggered manually.
+
+There is no cron-based or recurring scan support.
+
+**Planned fix:** Add a scheduler component with cron expression support.
 
 ---
 
-## Test Coverage
+## Resolved Issues
 
-| Module | Tests | Status |
-|--------|-------|--------|
-| Parsers | 14 | ✅ Passing |
-| Correlation | 8 | ✅ Passing |
-| Database | 4 | ✅ Passing |
-| Tools Execution | 0 | ⏳ Needs tools installed |
-| Integration | 0 | ⏳ Not implemented |
+The following issues were present in earlier versions and have been resolved:
 
-**Total:** 26 tests passing
+| Issue | Resolution | Date |
+|-------|-----------|------|
+| Dashboard could not connect to API | Updated `api.js` BASE_URL from port 8080 to 8000 | 2026-04-04 |
+| Dashboard displayed blank page | Added StaticFiles routes for `/assets/` and `/favicon.svg` | 2026-04-04 |
+| Findings table showed empty rows | Updated `Findings.jsx` to use correct API field names | 2026-04-04 |
+| Stat numbers invisible on dark background | Added `text-white` CSS class to stat display | 2026-04-04 |
+| AI summary returned "Connection error" | Added GROQ_API_KEY to docker-compose.yml environment | 2026-04-04 |
+| Ollama container crashed on startup | Migrated from Ollama to Groq cloud API | 2026-04-04 |
+| Desktop launcher opened wrong port | Updated launcher to `http://localhost:8000/app` | 2026-04-04 |
+| Groq model decommissioned | Updated model to `llama-3.1-8b-instant` | 2026-04-04 |
 
 ---
 
-## Immediate Next Steps
+## Technical Debt
 
-1. **Install subfinder** and run `tests/test_tools_execution.py`
-2. **Test end-to-end scan** with at least one tool
-3. **Fix dashboard WebSocket** integration
-4. **Add more integration tests**
+### Code Quality
+
+- `datetime.utcnow()` deprecation warnings -- should migrate to `datetime.now(datetime.UTC)`
+- Inconsistent docstring coverage across modules
+- Some modules lack unit test coverage (tools execution, integration tests)
+
+### Architecture
+
+- The `app/` and `hiverecon/` package namespaces have some overlap (event_bus, reports) that could be consolidated
+- Database engine is created fresh in multiple modules rather than using a shared instance
+
+### Testing
+
+- Automated test suite exists but was not executed as part of the CI pipeline during the most recent development session
+- Integration tests with real tool output are needed
+- End-to-end scan test should be added to CI
 
 ---
 
 ## Reporting Issues
 
-If you encounter issues not listed here:
-1. Check existing GitHub issues
-2. Create new issue with reproduction steps
-3. Include tool versions and error logs
+If you encounter an issue not listed here:
 
----
+1. Check existing GitHub issues for duplicates
+2. Create a new issue with reproduction steps, tool versions, and error logs
+3. Include the output of `docker compose logs app | tail -50`

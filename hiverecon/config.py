@@ -11,9 +11,8 @@ from pydantic_settings import BaseSettings
 
 class AIConfig(BaseModel):
     """AI/LLM configuration."""
-    provider: str = "ollama"
-    model: str = "qwen2.5:7b"
-    base_url: str = "http://localhost:11434"
+    provider: str = "groq"
+    model: str = "llama-3.1-8b-instant"
     temperature: float = 0.3
     max_tokens: int = 4096
 
@@ -83,7 +82,7 @@ class Config(BaseSettings):
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     
     # Environment overrides
-    ollama_base_url: Optional[str] = None
+    groq_api_key: Optional[str] = None
     ai_model: Optional[str] = None
     database_url: Optional[str] = None
     api_host: Optional[str] = None
@@ -107,8 +106,9 @@ class Config(BaseSettings):
         
         config = cls(**yaml_data)
 
-        if config.ollama_base_url:
-            config.ai.base_url = config.ollama_base_url
+        if config.groq_api_key:
+            # GROQ_API_KEY is used directly via env var
+            pass
         if config.ai_model:
             config.ai.model = config.ai_model
         if config.api_host:

@@ -2,12 +2,11 @@
 
 # AI Settings
 ai:
-  provider: ollama
-  model: qwen2.5:7b
-  base_url: http://localhost:11434
+  provider: groq
+  model: llama-3.1-8b-instant
   temperature: 0.3
   max_tokens: 4096
-  # Alternative models: llama3, mistral, codellama, qwen2.5:14b
+  # Alternative models: llama-3.3-70b-versatile, mixtral-8x7b-32768, gemma-7b-it
   
 # Database Settings
 database:

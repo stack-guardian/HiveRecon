@@ -73,29 +73,23 @@ install_python_deps() {
     fi
 }
 
-# Install Ollama
-install_ollama() {
-    print_info "Checking Ollama installation..."
-    
-    if command -v ollama &> /dev/null; then
-        print_status "Ollama already installed"
+# Setup Groq API key
+setup_groq() {
+    print_info "Setting up Groq API key..."
+
+    if [ -f "config/.env" ]; then
+        if grep -q "GROQ_API_KEY" config/.env; then
+            print_status "GROQ_API_KEY already configured in config/.env"
+        else
+            print_info "Add your GROQ_API_KEY to config/.env:"
+            print_info "  GROQ_API_KEY=gsk_your_key_here"
+        fi
     else
-        print_info "Installing Ollama..."
-        curl -fsSL https://ollama.com/install.sh | sh
-        print_status "Ollama installed"
+        print_info "Create config/.env and add:"
+        print_info "  GROQ_API_KEY=gsk_your_key_here"
     fi
-    
-    # Start Ollama if not running
-    if ! pgrep -x "ollama" > /dev/null; then
-        print_info "Starting Ollama service..."
-        ollama serve &
-        sleep 5
-    fi
-    
-    # Pull model
-    print_info "Pulling AI model (qwen2.5:7b)..."
-    ollama pull qwen2.5:7b
-    print_status "AI model ready"
+
+    print_status "Groq AI configured (get a free key at https://console.groq.com)"
 }
 
 # Install recon tools via Go
@@ -217,10 +211,10 @@ main() {
     
     install_python_deps
     echo ""
-    
-    install_ollama
+
+    setup_groq
     echo ""
-    
+
     install_recon_tools
     echo ""
     

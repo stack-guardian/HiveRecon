@@ -1,8 +1,7 @@
 # Core Framework
+groq>=0.4.0
 langchain>=0.1.0
 langchain-community>=0.0.10
-langchain-ollama>=0.1.0
-ollama>=0.1.0
 
 # API & Web Server
 fastapi>=0.109.0

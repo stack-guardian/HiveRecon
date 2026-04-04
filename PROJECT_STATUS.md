@@ -1,10 +1,10 @@
-# 🐝 HiveRecon - Project Status
+# HiveRecon - Project Status
 
 ## Overview
 
-HiveRecon is an **AI-powered reconnaissance framework** for bug bounty hunting, built with Python, LangChain, Ollama (free local AI), and React.
+HiveRecon is an **AI-powered reconnaissance framework** for bug bounty hunting, built with Python, LangChain, and Groq (cloud AI).
 
-## ✅ Completed Components
+## Completed Components
 
 ### Core Infrastructure
 - [x] Project structure and scaffolding
@@ -15,10 +15,10 @@ HiveRecon is an **AI-powered reconnaissance framework** for bug bounty hunting, 
 - [x] Docker & docker-compose configuration
 
 ### AI & Coordination
-- [x] Hive Mind AI Coordinator (LangChain + Ollama)
+- [x] Hive Mind AI Coordinator (LangChain + Groq)
 - [x] Scope validation with AI
 - [x] Educational content generation
-- [x] Support for Qwen 2.5, Llama 3, Mistral (via Ollama)
+- [x] Support for Llama 3, Mixtral, Gemma (via Groq)
 
 ### Recon Agents
 - [x] Subdomain Agent (subfinder, amass)
@@ -62,7 +62,7 @@ HiveRecon is an **AI-powered reconnaissance framework** for bug bounty hunting, 
 - [x] Unit tests for correlation
 - [x] Setup automation script
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 hiverecon/
@@ -111,7 +111,7 @@ hiverecon/
 └── README.md
 ```
 
-## 🚧 Pending Components
+## Pending Components
 
 ### High Priority
 1. **Report Generator** - PDF/Markdown export with educational content
@@ -125,7 +125,7 @@ hiverecon/
 3. **Custom Template Support** - User-defined nuclei templates
 4. **Scheduled Scans** - Cron-based automation
 
-## 🎯 Next Steps for MVP
+## Next Steps for MVP
 
 1. **Install dependencies:**
    ```bash
@@ -133,9 +133,9 @@ hiverecon/
    pip install -r requirements.txt
    ```
 
-2. **Setup Ollama:**
+2. **Set Groq API key:**
    ```bash
-   ollama pull qwen2.5:7b
+   export GROQ_API_KEY=gsk_your_key_here
    ```
 
 3. **Test CLI:**
@@ -153,11 +153,11 @@ hiverecon/
    docker-compose up -d
    ```
 
-## 📊 Key Features Summary
+## Key Features Summary
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| AI Coordination | ✅ | LangChain + Ollama |
+| AI Coordination | ✅ | LangChain + Groq |
 | Subdomain Enumeration | ✅ | subfinder, amass parsers |
 | Port Scanning | ✅ | nmap parser |
 | Endpoint Discovery | ✅ | katana, ffuf parsers |
@@ -186,7 +186,7 @@ hiverecon/
 ### Design Decisions
 
 - **SQLite**: Simple, portable, no external dependencies
-- **Ollama**: Free, local, privacy-focused AI
+- **Groq**: Cloud-based, fast, free tier available
 - **FastAPI**: Modern, async, auto-documentation
 - **React Bootstrap**: Quick, responsive, familiar UI
 - **Docker**: Reproducible, all tools bundled

@@ -3,7 +3,7 @@ services:
     build:
       context: .
     environment:
-      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY:-gsk_PLACEHOLDER_replace_with_your_key}
       DATABASE_URL: sqlite+aiosqlite:///./hiverecon.db
     ports:
       - "8000:8000"

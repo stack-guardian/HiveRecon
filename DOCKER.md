@@ -49,6 +49,6 @@ docker run --rm -it hiverecon bash
 
 ```bash
 HIVERECON_DB_URL=sqlite+aiosqlite:///data/hiverecon.db
-HIVERECON_AI_PROVIDER=ollama
-HIVERECON_AI_MODEL=qwen2.5:7b
+HIVERECON_AI_PROVIDER=groq
+HIVERECON_AI_MODEL=llama-3.1-8b-instant
 ```

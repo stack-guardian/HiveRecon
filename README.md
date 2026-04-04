@@ -51,6 +51,26 @@ HiveRecon automates the complete security reconnaissance pipeline -- from subdom
   <br><em>Scope Configuration — Define In/Out of Scope Targets</em>
 </p>
 
+<p align="center">
+  <img src="docs/images/04_hiverecon_scan_monitor.png" alt="Scan Monitor" width="90%">
+  <br><em>Scan Monitor — Real-Time Progress Tracking</em>
+</p>
+
+<p align="center">
+  <img src="docs/images/05_hiverecon_findings.png" alt="Findings" width="90%">
+  <br><em>Findings — Vulnerability Results Browser</em>
+</p>
+
+<p align="center">
+  <img src="docs/images/06_hiverecon_new_scan.png" alt="New Scan" width="90%">
+  <br><em>New Scan — Target Configuration</em>
+</p>
+
+<p align="center">
+  <img src="docs/images/07_hiverecon_dashboard.png" alt="Dashboard" width="90%">
+  <br><em>Dashboard — Statistics & Overview</em>
+</p>
+
 ## Tech Stack
 
 | Component | Technology |

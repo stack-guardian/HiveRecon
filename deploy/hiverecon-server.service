@@ -9,7 +9,7 @@ EnvironmentFile=%h/hiverecon/.env
 ExecStart=%h/hiverecon/venv/bin/uvicorn hiverecon.api.server:app --host 0.0.0.0 --port 8000 --log-level warning
 Restart=on-failure
 RestartSec=5
-Environment=PATH=%h/hiverecon/venv/bin
+Environment=PATH=%h/hiverecon/venv/bin:%h/go/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/bin
 
 [Install]
 WantedBy=default.target

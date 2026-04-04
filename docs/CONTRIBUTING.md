@@ -157,4 +157,4 @@ Brief description of changes
 
 Open an issue for discussion or reach out to maintainers.
 
-Thank you for contributing! 🐝
+Thank you for contributing!

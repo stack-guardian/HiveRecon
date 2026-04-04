@@ -1,9 +1,9 @@
 [Desktop Entry]
 Name=HiveRecon Scanner
 Comment=AI-Powered Bug Bounty Reconnaissance Framework
-Exec=/home/vibhxr/hiverecon/hiverecon-gui.sh
+Exec=firefox http://localhost:8000/app
 Icon=network-workgroup
-Terminal=true
+Terminal=false
 Type=Application
 Categories=Network;Security;
 Keywords=security;scanner;bug bounty;recon;

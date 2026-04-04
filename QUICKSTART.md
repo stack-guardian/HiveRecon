@@ -8,8 +8,7 @@ Your HiveRecon setup is complete and working!
 
 - ✅ Python dependencies installed
 - ✅ Database initialized
-- ✅ Ollama installed (v0.18.2)
-- ✅ qwen2.5:7b model ready
+- ✅ Groq API configured (llama-3.1-8b-instant)
 - ✅ API server running on http://localhost:8080
 
 ## Quick Commands
@@ -22,9 +21,9 @@ source venv/bin/activate
 
 ### 2. Start Services
 
-**Start Ollama (AI):**
+**Set Groq API key:**
 ```bash
-ollama serve
+export GROQ_API_KEY=gsk_your_key_here
 ```
 
 **Start API Server (in another terminal):**
@@ -114,13 +113,11 @@ go install github.com/joohoi/ffuf@latest
 
 ## Troubleshooting
 
-### Ollama Not Connecting
+### Groq API Key Not Set
 ```bash
-# Check if Ollama is running
-pgrep -x ollama
-
-# Start it manually
-ollama serve
+# Check if GROQ_API_KEY is set
+echo $GROQ_API_KEY
+# Get a free key at https://console.groq.com
 ```
 
 ### Port Already in Use

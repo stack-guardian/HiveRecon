@@ -58,7 +58,7 @@ export default function Dashboard() {
               <Icon size={18} className={color} />
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{value}</p>
+              <p className="text-3xl font-bold text-white">{value}</p>
             </CardContent>
           </Card>
         ))}

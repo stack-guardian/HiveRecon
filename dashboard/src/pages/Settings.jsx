@@ -2,15 +2,15 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Settings2, Server, Brain, CheckCircle, XCircle } from "lucide-react"
+import { Settings2, Server, Brain, CheckCircle, XCircle, Key } from "lucide-react"
 import { getHealth } from "@/api"
 
-const MODELS = ["qwen2.5:7b", "qwen2.5:3b", "phi4-mini", "llama3:8b", "mistral:7b"]
+const MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma-7b-it"]
 
 export default function Settings() {
   const [apiUrl, setApiUrl] = useState(localStorage.getItem("apiUrl") || "http://localhost:8080")
-  const [ollamaUrl, setOllamaUrl] = useState(localStorage.getItem("ollamaUrl") || "http://localhost:11434")
-  const [selectedModel, setSelectedModel] = useState(localStorage.getItem("model") || "qwen2.5:7b")
+  const [groqKey, setGroqKey] = useState(localStorage.getItem("groqKey") || "")
+  const [selectedModel, setSelectedModel] = useState(localStorage.getItem("model") || "llama-3.1-8b-instant")
   const [apiStatus, setApiStatus] = useState(null)
   const [saved, setSaved] = useState(false)
 
@@ -22,7 +22,7 @@ export default function Settings() {
 
   const handleSave = () => {
     localStorage.setItem("apiUrl", apiUrl)
-    localStorage.setItem("ollamaUrl", ollamaUrl)
+    localStorage.setItem("groqKey", groqKey)
     localStorage.setItem("model", selectedModel)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -64,10 +64,12 @@ export default function Settings() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm text-zinc-300">Ollama URL</label>
+            <label className="text-sm text-zinc-300">Groq API Key</label>
             <Input
-              value={ollamaUrl}
-              onChange={(e) => setOllamaUrl(e.target.value)}
+              value={groqKey}
+              onChange={(e) => setGroqKey(e.target.value)}
+              type="password"
+              placeholder="gsk_..."
               className="bg-zinc-800 border-zinc-700 text-white font-mono text-sm"
             />
           </div>
@@ -81,7 +83,7 @@ export default function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-xs text-zinc-500">Select the Ollama model to use for AI coordination</p>
+          <p className="text-xs text-zinc-500">Select the Groq model to use for AI coordination</p>
           <div className="flex flex-wrap gap-2">
             {MODELS.map((model) => (
               <button
@@ -124,7 +126,7 @@ export default function Settings() {
           </div>
           <div className="flex justify-between">
             <span>AI</span>
-            <span className="text-zinc-300 font-mono">Ollama (local)</span>
+            <span className="text-zinc-300 font-mono">Groq (cloud)</span>
           </div>
         </CardContent>
       </Card>

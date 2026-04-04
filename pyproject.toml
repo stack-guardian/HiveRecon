@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [
     {name = "HiveRecon Team", email = "hiverecon@example.com"}
 ]
-keywords = ["security", "recon", "bug-bounty", "ai", "langchain", "ollama"]
+keywords = ["security", "recon", "bug-bounty", "ai", "langchain", "groq"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -26,11 +26,10 @@ classifiers = [
 ]
 
 dependencies = [
+    "groq>=0.4.0",
     "langchain>=0.1.0",
     "langchain-community>=0.0.10",
-    "langchain-ollama>=0.1.0",
     "mcp>=1.0.0",
-    "ollama>=0.1.0",
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "sqlalchemy[asyncio]>=2.0.25",

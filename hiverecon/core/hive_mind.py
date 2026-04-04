@@ -1,17 +1,16 @@
-"""Hive Mind AI Coordinator - LangChain-based agent orchestration."""
+"""Hive Mind AI Coordinator - Groq-based agent orchestration."""
 
 import asyncio
 import fnmatch
 import json
 import logging
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
+from groq import AsyncGroq
 
 from hiverecon.agents.recon_agents import AgentType
 from hiverecon.config import get_config
@@ -56,14 +55,13 @@ class HiveMindCoordinator:
         self.scan_id = scan_id
         self.session = session
         self.config = config or get_config()
-        
-        # Initialize Ollama LLM
-        self.llm = ChatOllama(
-            model=self.config.ai.model,
-            base_url=self.config.ai.base_url,
-            temperature=self.config.ai.temperature,
-        )
-        
+
+        # Initialize Groq LLM client
+        api_key = os.environ.get("GROQ_API_KEY", "") or self.config.groq_api_key or ""
+        self.client = AsyncGroq(api_key=api_key)
+        self.model = self.config.ai.model
+        self.temperature = self.config.ai.temperature
+
         # System prompt for the hive mind
         self.system_prompt = """You are HiveRecon, an AI coordinator for bug bounty reconnaissance.
 
@@ -220,12 +218,16 @@ Your role:
         """
 
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content=self.system_prompt),
-                HumanMessage(content=prompt)
-            ])
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.temperature,
+            )
 
-            result = json.loads(response.content.strip())
+            result = json.loads(response.choices[0].message.content.strip())
 
             if isinstance(result, list):
                 return [str(host) for host in result if host]
@@ -266,12 +268,16 @@ Your role:
         """
 
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content=self.system_prompt),
-                HumanMessage(content=prompt)
-            ])
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.temperature,
+            )
 
-            result = json.loads(response.content.strip())
+            result = json.loads(response.choices[0].message.content.strip())
 
             if isinstance(result, list):
                 return [str(url) for url in result if url]
@@ -307,13 +313,17 @@ Your role:
             """
             
             try:
-                response = await self.llm.ainvoke([
-                    SystemMessage(content=self.system_prompt),
-                    HumanMessage(content=prompt)
-                ])
-                
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=self.temperature,
+                )
+
                 # Parse AI response
-                analysis = json.loads(response.content.strip())
+                analysis = json.loads(response.choices[0].message.content.strip())
                 
                 if analysis.get("in_scope", False):
                     target = Target(
@@ -372,12 +382,49 @@ Your role:
 
         return agent_runs
 
+    async def generate_scan_summary(self, findings: list[Finding]) -> str:
+        """Use AI to generate a high-level summary of all scan results."""
+        if not findings:
+            return "Scan complete. No findings were discovered."
+
+        findings_summary = [
+            {
+                "type": f.finding_type,
+                "title": f.title,
+                "severity": f.severity.value,
+            }
+            for f in findings
+        ]
+
+        prompt = f"""
+        Provide a concise executive summary of this reconnaissance scan.
+        Summarize the attack surface discovered, key vulnerabilities, and overall risk posture.
+
+        Findings:
+        {json.dumps(findings_summary, indent=2)}
+
+        Respond with a clean Markdown summary suitable for a dashboard.
+        """
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.temperature,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"Error generating summary: {str(e)}"
+
     async def run_scan(
         self,
         target: str,
         scan_id: Optional[str] = None,
         scope_config: Optional[dict] = None,
-    ) -> list[Finding]:
+    ) -> tuple[list[Finding], str]:
         """
         Orchestrate the full recon pipeline on a target.
         """
@@ -518,18 +565,23 @@ Your role:
         except Exception as e:
             print(f"[-] MCP agent failed: {str(e)}")
 
+        # Step 8: Generate Summary
+        print("[*] Generating AI scan summary...")
+        summary = await self.generate_scan_summary(all_findings)
+
         await event_bus.publish(self.scan_id, {
             "event": "complete",
             "summary": {
                 "total_findings": len(all_findings),
                 "target": normalized_target,
-                "completed_at": datetime.utcnow().isoformat()
+                "completed_at": datetime.utcnow().isoformat(),
+                "ai_summary": summary
             }
         })
         await event_bus.close_scan(self.scan_id)
 
         print(f"[***] Scan Complete! Total Findings: {len(all_findings)}")
-        return all_findings
+        return all_findings, summary
 
     async def _execute_agent(self, agent_run: AgentRun) -> None:
         """Execute a single recon agent."""
@@ -622,12 +674,16 @@ Your role:
         """
         
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content=self.system_prompt),
-                HumanMessage(content=prompt)
-            ])
-            
-            analyses = json.loads(response.content.strip())
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.temperature,
+            )
+
+            analyses = json.loads(response.choices[0].message.content.strip())
             
             # Apply AI analysis to findings
             for i, finding in enumerate(findings):
@@ -670,12 +726,16 @@ Your role:
         """
         
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content=self.system_prompt),
-                HumanMessage(content=prompt)
-            ])
-            
-            finding.educational_content = response.content
-            
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.temperature,
+            )
+
+            finding.educational_content = response.choices[0].message.content
+
         except Exception as e:
             finding.educational_content = f"Error generating educational content: {str(e)}"

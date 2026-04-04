@@ -7,7 +7,7 @@
 #       "cwd": "/home/vibhxr/hiverecon",
 #       "env": {
 #         "DATABASE_URL": "sqlite+aiosqlite:///./hiverecon.db",
-#         "OLLAMA_BASE_URL": "http://127.0.0.1:11434",
+#         "GROQ_API_KEY": "gsk_your_key_here",
 #         "HIVERECON_REPORTS_DIR": "/home/vibhxr/hiverecon/reports"
 #       }
 #     }
@@ -229,7 +229,7 @@ async def execute_scan(scan_uuid: uuid.UUID, target: str, scan_type: str) -> Non
     try:
         _scan_progress[scan_key] = ProgressState(status="running", pct=25, stage="recon")
         coordinator = HiveMindCoordinator(scan_id=str(scan_uuid), config=config)
-        findings = await coordinator.run_scan(
+        findings, summary = await coordinator.run_scan(
             target=target,
             scan_id=str(scan_uuid),
             scope_config={"scan_type": scan_type},
@@ -240,6 +240,7 @@ async def execute_scan(scan_uuid: uuid.UUID, target: str, scan_type: str) -> Non
             await persist_scan_findings(session, scan_uuid, findings)
             scan = await session.get(Scan, scan_uuid)
             if scan is not None:
+                scan.summary = summary
                 scan.status = ScanStatus.COMPLETED
                 scan.completed_at = datetime.utcnow()
             await session.commit()

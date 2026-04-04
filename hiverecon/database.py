@@ -17,7 +17,6 @@ from sqlalchemy import (
     Text,
     create_engine,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -56,7 +55,7 @@ class Scan(Base):
     
     __tablename__ = "scans"
     
-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     target_domain = Column(String, nullable=False, index=True)
     platform = Column(String, nullable=True)  # hackerone, bugcrowd, intigriti
     scope_config = Column(JSON, nullable=True)
@@ -64,6 +63,7 @@ class Scan(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+    summary = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
     
     # Relationships
@@ -79,7 +79,7 @@ class Target(Base):
     __tablename__ = "targets"
     
     id = Column(Integer, primary_key=True)
-    scan_id = Column(PGUUID(as_uuid=True), ForeignKey("scans.id"), nullable=False)
+    scan_id = Column(String(36), ForeignKey("scans.id"), nullable=False)
     target_type = Column(String, nullable=False)  # domain, wildcard, cidr, url
     target_value = Column(String, nullable=False)
     in_scope = Column(Boolean, default=True)
@@ -97,7 +97,7 @@ class Finding(Base):
     __tablename__ = "findings"
     
     id = Column(Integer, primary_key=True)
-    scan_id = Column(PGUUID(as_uuid=True), ForeignKey("scans.id"), nullable=False)
+    scan_id = Column(String(36), ForeignKey("scans.id"), nullable=False)
     target_id = Column(Integer, ForeignKey("targets.id"), nullable=True)
     agent_type = Column(SQLEnum(AgentType), nullable=False)
     finding_type = Column(String, nullable=False)  # subdomain, open_port, endpoint, vulnerability
@@ -123,7 +123,7 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     
     id = Column(Integer, primary_key=True)
-    scan_id = Column(PGUUID(as_uuid=True), ForeignKey("scans.id"), nullable=False)
+    scan_id = Column(String(36), ForeignKey("scans.id"), nullable=False)
     agent_type = Column(SQLEnum(AgentType), nullable=False)
     status = Column(SQLEnum(ScanStatus), default=ScanStatus.PENDING)
     command = Column(Text, nullable=True)
@@ -143,7 +143,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
     
     id = Column(Integer, primary_key=True)
-    scan_id = Column(PGUUID(as_uuid=True), ForeignKey("scans.id"), nullable=True)
+    scan_id = Column(String(36), ForeignKey("scans.id"), nullable=True)
     action = Column(String, nullable=False)
     actor = Column(String, default="system")  # user or system
     details = Column(JSON, nullable=True)

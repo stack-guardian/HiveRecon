@@ -5,6 +5,7 @@ Provides REST API for scan management, findings, and reports.
 """
 
 import asyncio
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Optional
@@ -12,6 +13,7 @@ from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from hiverecon import __version__
@@ -26,6 +28,7 @@ from hiverecon.core import (
     audit_log,
 )
 from hiverecon.api.v1.reports import router as reports_router
+from app.api.v1.ws import router as ws_router
 
 
 # Initialize FastAPI app
@@ -58,6 +61,7 @@ async def get_db():
 
 # Include API routers
 app.include_router(reports_router)
+app.include_router(ws_router, prefix="/api/v1/ws", tags=["websocket"])
 
 
 # ============== Pydantic Models ==============
@@ -98,7 +102,7 @@ class HealthResponse(BaseModel):
     """Health check response."""
     status: str
     version: str
-    ollama_connected: bool
+    groq_configured: bool
 
 
 # ============== Helper Functions ==============
@@ -120,41 +124,40 @@ async def run_scan_background(
         scan.started_at = datetime.utcnow()
         await session.commit()
 
-    try:
-        await audit_log(
-            action=AuditAction.SCAN_STARTED,
-            actor="api",
-            scan_id=scan_id,
-            details={"target": target, "platform": platform},
-        )
+        try:
+            await audit_log(
+                action=AuditAction.SCAN_STARTED,
+                actor="api",
+                scan_id=scan_id,
+                details={"target": target, "platform": platform},
+            )
 
-        coordinator = HiveMindCoordinator(config=config)
-        findings = await coordinator.run_scan(
-            target=target,
-            scan_id=scan_id,
-            scope_config=scope_config or {},
-        )
+            coordinator = HiveMindCoordinator(config=config, session=session)
+            findings, summary = await coordinator.run_scan(
+                target=target,
+                scan_id=scan_id,
+                scope_config=scope_config or {},
+            )
 
-        async with async_session_factory() as session:
             for finding in findings:
                 finding.scan_id = scan_id
                 session.add(finding)
 
             scan = await session.get(Scan, scan_id)
             if scan:
+                scan.summary = summary
                 scan.status = ScanStatus.COMPLETED
                 scan.completed_at = datetime.utcnow()
             await session.commit()
 
-        await audit_log(
-            action=AuditAction.SCAN_COMPLETED,
-            actor="system",
-            scan_id=scan_id,
-            details={"findings_count": len(findings)},
-        )
+            await audit_log(
+                action=AuditAction.SCAN_COMPLETED,
+                actor="system",
+                scan_id=scan_id,
+                details={"findings_count": len(findings)},
+            )
 
-    except Exception as e:
-        async with async_session_factory() as session:
+        except Exception as e:
             scan = await session.get(Scan, scan_id)
             if scan:
                 scan.status = ScanStatus.FAILED
@@ -162,12 +165,12 @@ async def run_scan_background(
                 scan.completed_at = datetime.utcnow()
                 await session.commit()
 
-        await audit_log(
-            action=AuditAction.SCAN_FAILED,
-            actor="system",
-            scan_id=scan_id,
-            details={"error": str(e)},
-        )
+            await audit_log(
+                action=AuditAction.SCAN_FAILED,
+                actor="system",
+                scan_id=scan_id,
+                details={"error": str(e)},
+            )
 
 
 # ============== API Endpoints ==============
@@ -185,20 +188,13 @@ async def root():
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check():
     """Health check endpoint."""
-    # Check Ollama connection
-    ollama_connected = False
-    try:
-        import httpx
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{config.ai.base_url}/api/tags", timeout=2)
-            ollama_connected = response.status_code == 200
-    except Exception:
-        pass
-    
+    # Check Groq API key configuration
+    groq_configured = bool(os.environ.get("GROQ_API_KEY", "") or config.groq_api_key or "")
+
     return {
         "status": "healthy",
         "version": __version__,
-        "ollama_connected": ollama_connected,
+        "groq_configured": groq_configured,
     }
 
 
@@ -209,7 +205,7 @@ async def create_scan(
     session: AsyncSession = Depends(get_db)
 ):
     """Create a new reconnaissance scan."""
-    scan_id = str(uuid.uuid4())[:8]
+    scan_id = str(uuid.uuid4())
     
     scan = Scan(
         id=scan_id,
@@ -309,10 +305,8 @@ async def get_scan_summary(scan_id: str, session: AsyncSession = Depends(get_db)
     )
     findings_count = findings_count_result.scalar() or 0
 
-    summary = ""
-    if hasattr(scan, "summary"):
-        summary = getattr(scan, "summary") or ""
-    elif isinstance(scan.scope_config, dict):
+    summary = scan.summary or ""
+    if not summary and isinstance(scan.scope_config, dict):
         summary = scan.scope_config.get("summary", "") or ""
 
     return {
@@ -469,6 +463,27 @@ async def startup_event():
 async def shutdown_event():
     """Close database connection on shutdown."""
     await engine.dispose()
+
+
+# ============== React Dashboard SPA ==============
+
+# Serve React dashboard
+import os as os_module
+dashboard_path = os_module.path.join(os_module.path.dirname(os_module.path.dirname(__file__)), "..", "dashboard", "dist")
+if os_module.path.exists(dashboard_path):
+    # Mount assets at root level so /assets/, /favicon.svg work correctly
+    app.mount("/assets", StaticFiles(directory=os_module.path.join(dashboard_path, "assets")), name="assets")
+    # Mount favicon
+    app.mount("/favicon.svg", StaticFiles(directory=dashboard_path), name="favicon")
+    # Redirect /app → /app/ (StaticFiles needs trailing slash)
+    from fastapi.responses import RedirectResponse
+    @app.get("/app", include_in_schema=False)
+    async def redirect_app():
+        return RedirectResponse(url="/app/")
+    # Mount SPA at /app/ with fallback to index.html
+    app.mount("/app", StaticFiles(directory=dashboard_path, html=True), name="app")
+    # Also mount at root for direct access
+    app.mount("/", StaticFiles(directory=dashboard_path, html=True), name="root")
 
 
 # Run with: uvicorn hiverecon.api.server:app --reload

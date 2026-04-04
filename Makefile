@@ -1,4 +1,4 @@
-.PHONY: build up down logs pull-model test shell
+.PHONY: build up down logs test shell
 
 build:
 	docker compose build
@@ -11,9 +11,6 @@ down:
 
 logs:
 	docker compose logs -f app
-
-pull-model:
-	docker compose exec ollama ollama pull qwen2.5:7b
 
 test:
 	docker compose exec app pytest tests/ -v

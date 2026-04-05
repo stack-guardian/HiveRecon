@@ -64,9 +64,6 @@ dmypy.json
 # Ruff
 .ruff_cache/
 
-# Docker
-.dockerignore
-
 # OS
 .DS_Store
 Thumbs.db

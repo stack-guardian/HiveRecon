@@ -1,3 +1,12 @@
+# Stage 1 — Build the React dashboard
+FROM node:20-slim AS dashboard-builder
+WORKDIR /dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci
+COPY dashboard/ .
+RUN npm run build
+
+# Stage 2 — Final Python image
 FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -17,7 +26,6 @@ RUN apt-get update \
         libpangocairo-1.0-0 \
         libcairo2 \
         libgdk-pixbuf-2.0-0 \
-        libffi-dev \
         shared-mime-info \
         libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -48,16 +56,15 @@ from pathlib import Path
 project = tomllib.loads(Path("pyproject.toml").read_text())
 for dependency in project["project"]["dependencies"]:
     print(dependency)
-
-for dependency in project["project"].get("optional-dependencies", {}).get("dev", []):
-    if dependency.startswith("pytest"):
-        print(dependency)
 PY
 
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && rm /tmp/requirements.txt
 
-COPY . .
+COPY hiverecon/ ./hiverecon/
+COPY config/ ./config/
+COPY pyproject.toml .
+COPY --from=dashboard-builder /dashboard/dist ./dashboard/dist
 
 RUN mkdir -p /root/.config/subfinder && \
     touch /root/.config/subfinder/config.yaml && \

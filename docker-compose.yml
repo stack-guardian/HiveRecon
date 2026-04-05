@@ -2,13 +2,17 @@ services:
   app:
     build:
       context: .
+    restart: unless-stopped
+    env_file:
+      - .env.example
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY:-gsk_PLACEHOLDER_replace_with_your_key}
-      DATABASE_URL: sqlite+aiosqlite:///./hiverecon.db
+      DATABASE_URL: sqlite+aiosqlite:////app/data/hiverecon.db
     ports:
       - "8000:8000"
     volumes:
       - ./reports:/app/reports
+      - ./data:/app/data
     networks:
       - hiverecon-net
     healthcheck:
